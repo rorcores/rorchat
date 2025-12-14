@@ -149,7 +149,7 @@ export default function Home() {
       return
     }
 
-    const fakeEmail = `${username}@rorchat.local`
+    const fakeEmail = `${username}@users.rorchat.app`
     
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: fakeEmail,
@@ -181,7 +181,7 @@ export default function Home() {
     const form = e.currentTarget
     const username = (form.elements.namedItem('username') as HTMLInputElement).value.trim().toLowerCase()
     const password = (form.elements.namedItem('password') as HTMLInputElement).value
-    const fakeEmail = `${username}@rorchat.local`
+    const fakeEmail = `${username}@users.rorchat.app`
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: fakeEmail,
