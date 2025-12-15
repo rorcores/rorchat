@@ -2,6 +2,24 @@
 
 import { useEffect, useState, useRef, TouchEvent } from 'react'
 
+// Message validation constants (mirrored from server)
+const MAX_MESSAGE_LENGTH = 500
+const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{Emoji}\p{Emoji_Component}\s\.,!?;:'"()\[\]{}\-_@#$%&*+=\/\\|~`^<>]*$/u
+
+function validateMessageContent(content: string): { valid: boolean; error?: string } {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { valid: false, error: 'Message cannot be empty' }
+  }
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    return { valid: false, error: `Message exceeds ${MAX_MESSAGE_LENGTH} character limit` }
+  }
+  if (!ALLOWED_CHARS_REGEX.test(trimmed)) {
+    return { valid: false, error: 'Message contains invalid characters' }
+  }
+  return { valid: true }
+}
+
 interface User {
   id: string
   username: string
@@ -23,9 +41,17 @@ export default function Home() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [isAdminOnline, setIsAdminOnline] = useState(false)
+  const [isAdminTyping, setIsAdminTyping] = useState(false)
+  const [messageInput, setMessageInput] = useState('')
+  const [messageError, setMessageError] = useState('')
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [testimonialIndex, setTestimonialIndex] = useState(0)
   const touchStartX = useRef<number | null>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastTypingSentRef = useRef<number>(0)
 
   const testimonials = [
     {
@@ -90,8 +116,15 @@ export default function Home() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
+  // Track message count to only auto-scroll when new messages arrive
+  const prevMessageCountRef = useRef(0)
+  
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Only scroll if new messages were added
+    if (messages.length > prevMessageCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+    prevMessageCountRef.current = messages.length
   }, [messages])
 
   useEffect(() => {
@@ -125,6 +158,7 @@ export default function Home() {
       if (cancelled) return
       setConversationId(data.conversationId)
       setMessages(data.messages || [])
+      setHasMoreMessages(data.hasMore || false)
     }
 
     bootstrap()
@@ -134,23 +168,120 @@ export default function Home() {
     }
   }, [currentUser])
 
+  // Poll for new messages only (using "after" param for efficiency)
   useEffect(() => {
     if (!currentUser || !conversationId) return
 
     let cancelled = false
     const interval = setInterval(async () => {
-      const res = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
+      // Get the ID of the most recent message to only fetch newer ones
+      const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
+      
+      const url = lastMessageId 
+        ? `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}&after=${encodeURIComponent(lastMessageId)}`
+        : `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`
+      
+      const res = await fetch(url)
       if (!res.ok) return
       const data = await res.json()
       if (cancelled) return
-      setMessages(data.messages || [])
+      
+      // Only append new messages if we have a cursor, otherwise replace
+      if (lastMessageId && data.messages?.length > 0) {
+        setMessages(prev => [...prev, ...data.messages])
+      } else if (!lastMessageId) {
+        setMessages(data.messages || [])
+        setHasMoreMessages(data.hasMore || false)
+      }
+      
+      setIsAdminTyping(data.adminTyping || false)
     }, 2000)
 
     return () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [currentUser, conversationId])
+  }, [currentUser, conversationId, messages])
+
+  // Load older messages when scrolling to top
+  const loadMoreMessages = async () => {
+    if (!conversationId || !hasMoreMessages || loadingMore || messages.length === 0) return
+    
+    const oldestMessage = messages[0]
+    if (!oldestMessage.id) return
+
+    setLoadingMore(true)
+    
+    // Save scroll position
+    const container = messagesContainerRef.current
+    const scrollHeightBefore = container?.scrollHeight || 0
+
+    try {
+      const res = await fetch(
+        `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}&before=${encodeURIComponent(oldestMessage.id)}`
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      
+      if (data.messages?.length > 0) {
+        setMessages(prev => [...data.messages, ...prev])
+        setHasMoreMessages(data.hasMore || false)
+        
+        // Restore scroll position after DOM update
+        requestAnimationFrame(() => {
+          if (container) {
+            const scrollHeightAfter = container.scrollHeight
+            container.scrollTop = scrollHeightAfter - scrollHeightBefore
+          }
+        })
+      } else {
+        setHasMoreMessages(false)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  // Handle scroll to detect when user scrolls near top
+  const handleScroll = () => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    
+    // Load more when scrolled within 100px of the top
+    if (container.scrollTop < 100 && hasMoreMessages && !loadingMore) {
+      loadMoreMessages()
+    }
+  }
+
+  // Send typing status to server
+  const sendTypingStatus = async (isTyping: boolean) => {
+    if (!conversationId) return
+    
+    // Debounce: don't send more than once per second
+    const now = Date.now()
+    if (isTyping && now - lastTypingSentRef.current < 1000) return
+    lastTypingSentRef.current = now
+
+    fetch('/api/chat/typing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, isTyping })
+    }).catch(() => {})
+  }
+
+  const handleTyping = () => {
+    sendTypingStatus(true)
+    
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    
+    // Set timeout to clear typing status after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingStatus(false)
+    }, 2000)
+  }
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -211,13 +342,23 @@ export default function Home() {
     e.preventDefault()
     if (!conversationId) return
 
-    const form = e.currentTarget
-    const input = form.elements.namedItem('message') as HTMLTextAreaElement
-    const content = input.value.trim()
+    const content = messageInput.trim()
     
-    if (!content) return
+    // Client-side validation
+    const validation = validateMessageContent(content)
+    if (!validation.valid) {
+      setMessageError(validation.error || 'Invalid message')
+      return
+    }
 
-    input.value = ''
+    setMessageInput('')
+    setMessageError('')
+
+    // Clear typing status
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    sendTypingStatus(false)
 
     // Optimistic update
     setMessages(prev => [...prev, {
@@ -233,11 +374,13 @@ export default function Home() {
     })
 
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setMessageError(data.error || 'Failed to send message')
       // fallback: refresh from server
       const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
       if (refresh.ok) {
-        const data = await refresh.json()
-        setMessages(data.messages || [])
+        const refreshData = await refresh.json()
+        setMessages(refreshData.messages || [])
       }
     }
   }
@@ -407,7 +550,23 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="messages-container">
+        <div 
+          className="messages-container" 
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+        >
+          {/* Loading indicator for older messages */}
+          {loadingMore && (
+            <div className="load-more-indicator">
+              <div className="loading-spinner small"></div>
+            </div>
+          )}
+          {/* Show "load more" hint if there are more messages */}
+          {hasMoreMessages && !loadingMore && currentUser && messages.length > 0 && (
+            <button className="load-more-btn" onClick={loadMoreMessages}>
+              Load older messages
+            </button>
+          )}
           {displayMessages.length === 0 ? (
             <div className="welcome-chat">
               <div className="welcome-icon">💬</div>
@@ -436,10 +595,22 @@ export default function Home() {
               )
             })
           )}
+          {isAdminTyping && currentUser && (
+            <div className="typing-indicator">
+              <div className="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
         <form className="input-area" onSubmit={sendMessage}>
+          {messageError && (
+            <div className="message-error">{messageError}</div>
+          )}
           <div className="input-wrapper">
             <textarea 
               className="message-input" 
@@ -447,6 +618,13 @@ export default function Home() {
               placeholder="Message..."
               rows={1}
               disabled={!currentUser}
+              value={messageInput}
+              maxLength={MAX_MESSAGE_LENGTH}
+              onChange={(e) => {
+                setMessageInput(e.target.value)
+                setMessageError('')
+                handleTyping()
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -454,12 +632,17 @@ export default function Home() {
                 }
               }}
             />
-            <button type="submit" className="send-btn" disabled={!currentUser}>
+            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim()}>
               <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
               </svg>
             </button>
           </div>
+          {messageInput.length > MAX_MESSAGE_LENGTH * 0.8 && (
+            <div className={`char-count ${messageInput.length >= MAX_MESSAGE_LENGTH ? 'limit' : ''}`}>
+              {messageInput.length}/{MAX_MESSAGE_LENGTH}
+            </div>
+          )}
         </form>
       </div>
 

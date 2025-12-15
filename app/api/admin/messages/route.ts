@@ -36,5 +36,16 @@ export async function GET(request: NextRequest) {
     [conversationId]
   )
 
-  return NextResponse.json({ messages: rows })
+  // Check if user is typing (within last 3 seconds)
+  const { rows: typingRows } = await db.query(
+    `SELECT 1 FROM typing_status 
+     WHERE conversation_id = $1 
+     AND is_admin = false 
+     AND updated_at > now() - interval '3 seconds'
+     LIMIT 1`,
+    [conversationId]
+  )
+  const userTyping = typingRows.length > 0
+
+  return NextResponse.json({ messages: rows, userTyping })
 }

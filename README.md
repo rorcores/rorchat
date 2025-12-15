@@ -12,6 +12,7 @@ A **sleek, professional** web chat app. Users pick a username and chat with you 
 - 🎨 **Premium aesthetics** - Subtle waves, line art, gradient orbs
 - 👤 **Simple auth** - Just username + password (no email required)
 - 🔄 **Live messaging** - Simple polling-based updates
+- 💬 **Typing indicators** - See when the other person is typing (like iMessage/WhatsApp)
 - ⚡ **Admin dashboard** - Manage all conversations at `/admin`
 - 🔐 **Secure** - Bcrypt password hashing, random session tokens (httpOnly cookies), DB locked down from anon
 
@@ -141,12 +142,25 @@ REVOKE ALL ON TABLE sessions FROM anon, authenticated;
 REVOKE ALL ON TABLE conversations FROM anon, authenticated;
 REVOKE ALL ON TABLE messages FROM anon, authenticated;
 
+-- Typing status table (for real-time typing indicators)
+CREATE TABLE IF NOT EXISTS typing_status (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+    is_admin BOOLEAN DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(conversation_id, is_admin)
+);
+
+ALTER TABLE typing_status ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE typing_status FROM anon, authenticated;
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_typing_status_conversation ON typing_status(conversation_id);
 ```
 
 ## Project Structure

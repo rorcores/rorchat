@@ -26,7 +26,10 @@ export default function Admin() {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
+  const [isUserTyping, setIsUserTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastTypingSentRef = useRef<number>(0)
 
   useEffect(() => {
     checkAdminSession()
@@ -98,6 +101,37 @@ export default function Admin() {
     if (!res.ok) return
     const data = await res.json()
     setMessages(data.messages || [])
+    setIsUserTyping(data.userTyping || false)
+  }
+
+  // Send typing status to server
+  const sendTypingStatus = async (isTyping: boolean) => {
+    if (!selectedConv) return
+    
+    // Debounce: don't send more than once per second
+    const now = Date.now()
+    if (isTyping && now - lastTypingSentRef.current < 1000) return
+    lastTypingSentRef.current = now
+
+    fetch('/api/admin/typing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId: selectedConv.id, isTyping })
+    }).catch(() => {})
+  }
+
+  const handleTyping = () => {
+    sendTypingStatus(true)
+    
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    
+    // Set timeout to clear typing status after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingStatus(false)
+    }, 2000)
   }
 
   const selectConversation = async (conv: Conversation) => {
@@ -121,6 +155,12 @@ export default function Admin() {
     if (!content) return
 
     input.value = ''
+
+    // Clear typing status
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    sendTypingStatus(false)
 
     // Optimistic update
     setMessages(prev => [...prev, {
@@ -259,6 +299,15 @@ export default function Admin() {
                     </div>
                   </div>
                 ))}
+                {isUserTyping && (
+                  <div className="typing-indicator">
+                    <div className="typing-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -268,6 +317,7 @@ export default function Admin() {
                   name="reply"
                   placeholder="Type a reply..."
                   rows={1}
+                  onInput={handleTyping}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
