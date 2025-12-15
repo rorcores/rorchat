@@ -22,6 +22,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isAdminOnline, setIsAdminOnline] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [testimonialIndex, setTestimonialIndex] = useState(0)
   const touchStartX = useRef<number | null>(null)
@@ -57,6 +58,23 @@ export default function Home() {
   useEffect(() => {
     // Check if already logged in
     checkAuth()
+  }, [])
+
+  // Check admin online status
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const res = await fetch('/api/admin/status')
+        const data = await res.json()
+        setIsAdminOnline(data.online)
+      } catch {
+        setIsAdminOnline(false)
+      }
+    }
+
+    checkAdminStatus()
+    const interval = setInterval(checkAdminStatus, 10_000) // Check every 10 seconds
+    return () => clearInterval(interval)
   }, [])
 
   // Close dropdown when clicking outside
@@ -231,6 +249,65 @@ export default function Home() {
     })
   }
 
+  const formatDateHeader = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 0) {
+      return formatTime(timestamp)
+    } else if (diffDays === 1) {
+      return `Yesterday ${formatTime(timestamp)}`
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString([], { weekday: 'long' }) + ' ' + formatTime(timestamp)
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + formatTime(timestamp)
+    }
+  }
+
+  const shouldShowTimestamp = (messages: Message[], index: number): 'none' | 'inline' | 'header' => {
+    if (index === 0) return 'header'
+    
+    const currentMsg = messages[index]
+    const prevMsg = messages[index - 1]
+    
+    const currentTime = new Date(currentMsg.created_at).getTime()
+    const prevTime = new Date(prevMsg.created_at).getTime()
+    const diffMinutes = (currentTime - prevTime) / (1000 * 60)
+    
+    // If more than 15 minutes, show a header timestamp (centered, like iMessage)
+    if (diffMinutes > 15) return 'header'
+    
+    // If sender changed, show inline timestamp on last message of previous group
+    if (currentMsg.is_admin !== prevMsg.is_admin) return 'none'
+    
+    // Same sender, within 5 minutes - no timestamp needed
+    if (diffMinutes <= 5) return 'none'
+    
+    // Same sender but 5-15 minutes gap - show inline
+    return 'inline'
+  }
+
+  const shouldShowInlineTimestamp = (messages: Message[], index: number): boolean => {
+    // Show inline timestamp on the LAST message of a group
+    if (index === messages.length - 1) return true
+    
+    const currentMsg = messages[index]
+    const nextMsg = messages[index + 1]
+    
+    const currentTime = new Date(currentMsg.created_at).getTime()
+    const nextTime = new Date(nextMsg.created_at).getTime()
+    const diffMinutes = (nextTime - currentTime) / (1000 * 60)
+    
+    // Show timestamp if next message is from different sender
+    if (currentMsg.is_admin !== nextMsg.is_admin) return true
+    
+    // Show timestamp if there's a significant gap before next message
+    if (diffMinutes > 5) return true
+    
+    return false
+  }
+
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     touchStartX.current = e.touches[0].clientX
   }
@@ -270,8 +347,8 @@ export default function Home() {
               <div className="chat-header-info">
                 <h2>Rory</h2>
                 <div className="status">
-                  <span className="status-dot"></span>
-                  Online
+                  <span className={`status-dot ${isAdminOnline ? 'online' : ''}`}></span>
+                  {isAdminOnline ? 'Online' : 'Offline'}
                 </div>
               </div>
             </div>
@@ -298,8 +375,8 @@ export default function Home() {
             <div className="chat-header-info">
               <h2>Rory</h2>
               <div className="status">
-                <span className="status-dot"></span>
-                Online
+                <span className={`status-dot ${isAdminOnline ? 'online' : ''}`}></span>
+                {isAdminOnline ? 'Online' : 'Offline'}
               </div>
             </div>
           </div>
@@ -338,12 +415,26 @@ export default function Home() {
               <p>Send a message and Rory will get back to you soon.</p>
             </div>
           ) : (
-            displayMessages.map((msg, i) => (
-              <div key={i} className={`message ${msg.is_admin ? 'received' : 'sent'}`}>
-                <div className="message-bubble">{msg.content}</div>
-                <div className="message-time">{formatTime(msg.created_at)}</div>
-              </div>
-            ))
+            displayMessages.map((msg, i) => {
+              const timestampType = shouldShowTimestamp(displayMessages, i)
+              const showInline = shouldShowInlineTimestamp(displayMessages, i)
+              
+              return (
+                <div key={i} className={`message-group ${msg.is_admin ? 'received' : 'sent'}`}>
+                  {timestampType === 'header' && (
+                    <div className="message-time-header">
+                      {formatDateHeader(msg.created_at)}
+                    </div>
+                  )}
+                  <div className={`message ${msg.is_admin ? 'received' : 'sent'}`}>
+                    <div className="message-bubble">{msg.content}</div>
+                    {showInline && (
+                      <div className="message-time">{formatTime(msg.created_at)}</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -375,36 +466,6 @@ export default function Home() {
       {/* Auth Modal Overlay */}
       {!currentUser && (
         <div className="auth-overlay">
-          {/* Subtle decorative background curves */}
-          <svg className="auth-decoration" viewBox="0 0 400 800" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path 
-              d="M-50 100 Q 100 150 50 300 T 100 500 T 0 700" 
-              stroke="rgba(99, 91, 255, 0.18)" 
-              strokeWidth="1.5" 
-              fill="none"
-            />
-            <path 
-              d="M450 50 Q 300 100 350 250 T 280 450 T 400 650" 
-              stroke="rgba(99, 91, 255, 0.15)" 
-              strokeWidth="1.5" 
-              fill="none"
-            />
-            <path 
-              d="M-30 200 Q 150 250 100 400 T 180 600" 
-              stroke="rgba(99, 91, 255, 0.12)" 
-              strokeWidth="1" 
-              fill="none"
-            />
-            <path 
-              d="M430 150 Q 280 200 320 350 T 250 550" 
-              stroke="rgba(99, 91, 255, 0.1)" 
-              strokeWidth="1" 
-              fill="none"
-            />
-            {/* Subtle circular accents */}
-            <circle cx="50" cy="150" r="80" stroke="rgba(99, 91, 255, 0.08)" strokeWidth="0.75" fill="none" />
-            <circle cx="350" cy="600" r="100" stroke="rgba(99, 91, 255, 0.07)" strokeWidth="0.75" fill="none" />
-          </svg>
           <div className="auth-modal-card">
             <a href="/" className="logo">
               <span className="logo-text">rorchat<span className="dot">.</span></span>

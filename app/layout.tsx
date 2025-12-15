@@ -14,10 +14,29 @@ const plusJakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'rorchat. — Talk to Rory',
-  description: 'The easiest way to reach Rory, and it\'s free.',
+  title: 'rorchat. — Talk to Rory.',
+  description: 'Start a conversation with Rory. Simple, fast, straightforward.',
+  metadataBase: new URL('https://rorchat.com'),
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23000' width='100' height='100' rx='22'/><text x='50' y='66' text-anchor='middle' fill='white' font-size='32' font-weight='700' font-family='system-ui'>rc</text><circle cx='74' cy='58' r='6' fill='%230071e3'/></svg>",
+    icon: [
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: '/apple-icon.png',
+  },
+  manifest: '/site.webmanifest',
+  openGraph: {
+    title: 'rorchat. — Talk to Rory.',
+    description: 'Start a conversation with Rory. Simple, fast, straightforward.',
+    url: 'https://rorchat.com',
+    siteName: 'rorchat.',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'rorchat. — Talk to Rory.',
+    description: 'Start a conversation with Rory. Simple, fast, straightforward.',
   },
 }
 

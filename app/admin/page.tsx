@@ -25,6 +25,7 @@ export default function Admin() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -40,6 +41,16 @@ export default function Admin() {
 
     loadConversations()
     const interval = setInterval(loadConversations, 2000)
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
+
+  // Heartbeat to keep admin status "online"
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const heartbeat = () => fetch('/api/admin/me').catch(() => {})
+    heartbeat() // Initial ping
+    const interval = setInterval(heartbeat, 10_000) // Every 10 seconds
     return () => clearInterval(interval)
   }, [isAuthenticated])
 
@@ -91,7 +102,12 @@ export default function Admin() {
 
   const selectConversation = async (conv: Conversation) => {
     setSelectedConv(conv)
+    setMobileView('chat')
     await loadMessages(conv.id)
+  }
+
+  const goBackToList = () => {
+    setMobileView('list')
   }
 
   const sendReply = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -169,7 +185,7 @@ export default function Admin() {
         </div>
       </div>
 
-      <div className="admin-app" style={{ display: isAuthenticated ? 'flex' : 'none' }}>
+      <div className={`admin-app ${mobileView === 'chat' ? 'mobile-chat-view' : 'mobile-list-view'}`} style={{ display: isAuthenticated ? 'flex' : 'none' }}>
         <aside className="sidebar">
           <div className="sidebar-header">
             <a href="/" className="logo">
@@ -218,8 +234,13 @@ export default function Admin() {
             </div>
           ) : (
             <>
-              <header className="chat-header">
+              <header className="chat-header admin-chat-header">
                 <div className="chat-header-left">
+                  <button className="back-btn" onClick={goBackToList} aria-label="Back to conversations">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                  </button>
                   <div className="avatar">{getDisplayName(selectedConv).charAt(0).toUpperCase()}</div>
                   <div className="chat-header-info">
                     <h2>{getDisplayName(selectedConv)}</h2>
