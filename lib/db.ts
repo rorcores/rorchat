@@ -34,10 +34,11 @@ function getPool() {
   }
   const connectionString = normalizeConnectionString(rawConnectionString)
 
+  // Parse once for validation + safe diagnostics (never log password).
+  let parsedUrl: URL
   // Validate early so we fail with a clear message (pg-connection-string can crash with a vague TypeError).
   try {
-    // eslint-disable-next-line no-new
-    new URL(connectionString)
+    parsedUrl = new URL(connectionString)
   } catch {
     const redacted = redactConnectionString(connectionString)
     console.error('[db] invalid DATABASE_URL', {
@@ -57,6 +58,14 @@ function getPool() {
   }
 
   const ssl = shouldUseSSL(connectionString) ? { rejectUnauthorized: false } : undefined
+
+  console.log('[db] init', {
+    vercelEnv: process.env.VERCEL_ENV,
+    nodeEnv: process.env.NODE_ENV,
+    host: parsedUrl.host,
+    database: parsedUrl.pathname,
+    ssl: !!ssl
+  })
 
   pool = new Pool({
     connectionString,
