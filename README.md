@@ -128,7 +128,19 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT false,
+    reply_to_id UUID REFERENCES messages(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Message reactions table (emoji reactions on messages)
+CREATE TABLE IF NOT EXISTS message_reactions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    message_id UUID REFERENCES messages(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    is_admin BOOLEAN DEFAULT false,
+    emoji TEXT NOT NULL CHECK (emoji IN ('👍', '❤️', '😂', '😮', '😢')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(message_id, user_id, is_admin)
 );
 
 -- Lock down Supabase public API access (browser should not access tables directly)
@@ -154,6 +166,9 @@ CREATE TABLE IF NOT EXISTS typing_status (
 ALTER TABLE typing_status ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE typing_status FROM anon, authenticated;
 
+ALTER TABLE message_reactions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE message_reactions FROM anon, authenticated;
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -161,6 +176,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_typing_status_conversation ON typing_status(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id ON message_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to_id ON messages(reply_to_id);
 ```
 
 ## Project Structure

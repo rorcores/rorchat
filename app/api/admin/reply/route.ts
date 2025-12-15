@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { conversationId, content } = await request.json()
+  const { conversationId, content, replyToId } = await request.json()
 
   if (!conversationId || typeof conversationId !== 'string') {
     return NextResponse.json({ error: 'conversationId is required' }, { status: 400 })
@@ -34,11 +34,22 @@ export async function POST(request: NextRequest) {
   if (!message) return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   if (message.length > 5000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
 
+  // Validate replyToId if provided
+  if (replyToId) {
+    const { rows: replyRows } = await db.query(
+      'SELECT id FROM messages WHERE id = $1 AND conversation_id = $2 LIMIT 1',
+      [replyToId, conversationId]
+    )
+    if (replyRows.length === 0) {
+      return NextResponse.json({ error: 'Reply target not found' }, { status: 400 })
+    }
+  }
+
   const { rows } = await db.query(
-    `INSERT INTO messages (conversation_id, content, is_admin)
-     VALUES ($1, $2, true)
-     RETURNING id, content, is_admin, created_at`,
-    [conversationId, message]
+    `INSERT INTO messages (conversation_id, content, is_admin, reply_to_id)
+     VALUES ($1, $2, true, $3)
+     RETURNING id, content, is_admin, created_at, reply_to_id`,
+    [conversationId, message, replyToId || null]
   )
 
   await db.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId])

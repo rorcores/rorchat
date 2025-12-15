@@ -11,12 +11,29 @@ interface Conversation {
   display_name?: string | null
 }
 
+interface Reaction {
+  emoji: string
+  count: number
+  hasAdmin: boolean
+  hasUser: boolean
+}
+
+interface ReplyTo {
+  id: string
+  content: string
+  is_admin: boolean
+}
+
 interface Message {
   id?: string
   content: string
   is_admin: boolean
   created_at: string
+  reactions?: Reaction[]
+  reply_to?: ReplyTo | null
 }
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢']
 
 export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -30,6 +47,9 @@ export default function Admin() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastTypingSentRef = useRef<number>(0)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null)
+  const reactionPickerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     checkAdminSession()
@@ -134,14 +154,89 @@ export default function Admin() {
     }, 2000)
   }
 
+  const handleReaction = async (messageId: string | undefined, emoji: string) => {
+    if (!messageId) return
+    
+    setActiveReactionPicker(null)
+    
+    // Optimistic update
+    setMessages(prev => prev.map(msg => {
+      if (msg.id !== messageId) return msg
+      
+      const reactions = [...(msg.reactions || [])]
+      const existingIdx = reactions.findIndex(r => r.emoji === emoji)
+      
+      if (existingIdx >= 0) {
+        const existing = reactions[existingIdx]
+        if (existing.hasAdmin) {
+          // Remove admin's reaction
+          if (existing.count <= 1 && !existing.hasUser) {
+            reactions.splice(existingIdx, 1)
+          } else {
+            reactions[existingIdx] = { ...existing, count: existing.count - 1, hasAdmin: false }
+          }
+        } else {
+          // Add admin's reaction (replacing any existing)
+          const otherReactions = reactions.filter((r, i) => i !== existingIdx && !r.hasAdmin)
+          reactions.length = 0
+          reactions.push(...otherReactions, { ...existing, count: existing.count + 1, hasAdmin: true })
+        }
+      } else {
+        // Remove admin's other reactions first
+        const cleanedReactions = reactions.map(r => 
+          r.hasAdmin ? { ...r, count: r.count - 1, hasAdmin: false } : r
+        ).filter(r => r.count > 0)
+        cleanedReactions.push({ emoji, count: 1, hasAdmin: true, hasUser: false })
+        reactions.length = 0
+        reactions.push(...cleanedReactions)
+      }
+      
+      return { ...msg, reactions }
+    }))
+    
+    // Send to server
+    await fetch('/api/admin/reactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId, emoji })
+    })
+  }
+
+  const handleReply = (msg: Message) => {
+    setReplyingTo(msg)
+    setActiveReactionPicker(null)
+  }
+
+  const cancelReply = () => {
+    setReplyingTo(null)
+  }
+
+  const showReactionPicker = (messageId: string | undefined) => {
+    if (!messageId) return
+    
+    if (reactionPickerTimeoutRef.current) {
+      clearTimeout(reactionPickerTimeoutRef.current)
+    }
+    
+    setActiveReactionPicker(messageId)
+    
+    reactionPickerTimeoutRef.current = setTimeout(() => {
+      setActiveReactionPicker(null)
+    }, 5000)
+  }
+
   const selectConversation = async (conv: Conversation) => {
     setSelectedConv(conv)
     setMobileView('chat')
+    setReplyingTo(null)
+    setActiveReactionPicker(null)
     await loadMessages(conv.id)
   }
 
   const goBackToList = () => {
     setMobileView('list')
+    setReplyingTo(null)
+    setActiveReactionPicker(null)
   }
 
   const sendReply = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -154,7 +249,10 @@ export default function Admin() {
 
     if (!content) return
 
+    const replyToId = replyingTo?.id
+
     input.value = ''
+    setReplyingTo(null)
 
     // Clear typing status
     if (typingTimeoutRef.current) {
@@ -166,13 +264,18 @@ export default function Admin() {
     setMessages(prev => [...prev, {
       content,
       is_admin: true,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      reply_to: replyingTo ? {
+        id: replyingTo.id!,
+        content: replyingTo.content,
+        is_admin: replyingTo.is_admin
+      } : null
     }])
 
     await fetch('/api/admin/reply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId: selectedConv.id, content })
+      body: JSON.stringify({ conversationId: selectedConv.id, content, replyToId })
     })
   }
 
@@ -291,9 +394,64 @@ export default function Admin() {
 
               <div className="messages-container">
                 {messages.map((msg, i) => (
-                  <div key={i} className={`message ${msg.is_admin ? 'sent' : 'received'}`}
+                  <div 
+                    key={msg.id || i} 
+                    className={`message ${msg.is_admin ? 'sent' : 'received'}`}
+                    onDoubleClick={() => msg.id && showReactionPicker(msg.id)}
                   >
+                    {/* Reply context */}
+                    {msg.reply_to && (
+                      <div className={`reply-context ${msg.reply_to.is_admin ? 'from-admin' : 'from-user'}`}>
+                        <div className="reply-context-label">
+                          {msg.reply_to.is_admin ? 'You' : getDisplayName(selectedConv)}
+                        </div>
+                        <div className="reply-context-content">
+                          {msg.reply_to.content.length > 50 
+                            ? msg.reply_to.content.slice(0, 50) + '...' 
+                            : msg.reply_to.content}
+                        </div>
+                      </div>
+                    )}
                     <div className="message-bubble">{msg.content}</div>
+                    
+                    {/* Reactions */}
+                    {msg.reactions && msg.reactions.length > 0 && (
+                      <div className="message-reactions">
+                        {msg.reactions.map(r => (
+                          <button
+                            key={r.emoji}
+                            className={`reaction-badge ${r.hasAdmin ? 'admin-reacted' : ''}`}
+                            onClick={() => handleReaction(msg.id, r.emoji)}
+                          >
+                            <span className="reaction-emoji">{r.emoji}</span>
+                            {r.count > 1 && <span className="reaction-count">{r.count}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Reaction picker */}
+                    {activeReactionPicker === msg.id && (
+                      <div className="reaction-picker">
+                        {REACTION_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            className="reaction-picker-btn"
+                            onClick={() => handleReaction(msg.id, emoji)}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button
+                          className="reaction-picker-btn reply-btn"
+                          onClick={() => handleReply(msg)}
+                          title="Reply"
+                        >
+                          ↩️
+                        </button>
+                      </div>
+                    )}
+                    
                     <div className="message-time">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
@@ -312,24 +470,46 @@ export default function Admin() {
               </div>
 
               <form className="reply-area" onSubmit={sendReply}>
-                <textarea
-                  className="reply-input"
-                  name="reply"
-                  placeholder="Type a reply..."
-                  rows={1}
-                  onInput={handleTyping}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      e.currentTarget.form?.requestSubmit()
-                    }
-                  }}
-                />
-                <button type="submit" className="send-btn">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                  </svg>
-                </button>
+                {/* Reply preview */}
+                {replyingTo && (
+                  <div className="reply-preview">
+                    <div className="reply-preview-content">
+                      <span className="reply-preview-label">
+                        Replying to {replyingTo.is_admin ? 'yourself' : getDisplayName(selectedConv)}
+                      </span>
+                      <span className="reply-preview-text">
+                        {replyingTo.content.length > 60 
+                          ? replyingTo.content.slice(0, 60) + '...' 
+                          : replyingTo.content}
+                      </span>
+                    </div>
+                    <button type="button" className="reply-cancel" onClick={cancelReply}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                <div className="reply-input-wrapper">
+                  <textarea
+                    className="reply-input"
+                    name="reply"
+                    placeholder="Type a reply..."
+                    rows={1}
+                    onInput={handleTyping}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        e.currentTarget.form?.requestSubmit()
+                      }
+                    }}
+                  />
+                  <button type="submit" className="send-btn">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                  </button>
+                </div>
               </form>
             </>
           )}

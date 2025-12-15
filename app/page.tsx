@@ -26,12 +26,29 @@ interface User {
   display_name: string
 }
 
+interface Reaction {
+  emoji: string
+  count: number
+  hasAdmin: boolean
+  hasUser: boolean
+}
+
+interface ReplyTo {
+  id: string
+  content: string
+  is_admin: boolean
+}
+
 interface Message {
   id?: string
   content: string
   is_admin: boolean
   created_at: string
+  reactions?: Reaction[]
+  reply_to?: ReplyTo | null
 }
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢']
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -53,6 +70,9 @@ export default function Home() {
   const touchStartX = useRef<number | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastTypingSentRef = useRef<number>(0)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null)
+  const reactionPickerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const testimonials = [
     {
@@ -192,8 +212,18 @@ export default function Home() {
 
     let cancelled = false
     const interval = setInterval(async () => {
-      // Get the ID of the most recent message to only fetch newer ones
-      const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
+      // Use functional state to get the latest messages without adding to dependencies
+      let lastMessageId: string | null = null
+      setMessages(prev => {
+        // Find the last message WITH an id (skip optimistic messages without ids)
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].id) {
+            lastMessageId = prev[i].id!
+            break
+          }
+        }
+        return prev // Don't actually change state, just read it
+      })
       
       const url = lastMessageId 
         ? `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}&after=${encodeURIComponent(lastMessageId)}`
@@ -204,10 +234,30 @@ export default function Home() {
       const data = await res.json()
       if (cancelled) return
       
-      // Only append new messages if we have a cursor, otherwise replace
-      if (lastMessageId && data.messages?.length > 0) {
-        setMessages(prev => [...prev, ...data.messages])
+      if (data.messages?.length > 0) {
+        setMessages(prev => {
+          // Build a set of existing message IDs for deduplication
+          const existingIds = new Set(prev.map(m => m.id).filter(Boolean))
+          
+          // Filter out any messages we already have
+          const newMessages = data.messages.filter((m: Message) => m.id && !existingIds.has(m.id))
+          
+          if (newMessages.length === 0) return prev // No new messages, don't update state
+          
+          // Remove any optimistic messages that match new messages by content
+          // (optimistic messages have no id but same content)
+          const prevWithoutOptimistic = prev.filter(m => {
+            if (m.id) return true // Keep messages with IDs
+            // Check if any new message matches this optimistic one
+            return !newMessages.some((nm: Message) => 
+              nm.content === m.content && nm.is_admin === m.is_admin
+            )
+          })
+          
+          return [...prevWithoutOptimistic, ...newMessages]
+        })
       } else if (!lastMessageId) {
+        // Initial load case - no existing messages with IDs
         setMessages(data.messages || [])
         setHasMoreMessages(data.hasMore || false)
       }
@@ -219,7 +269,7 @@ export default function Home() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [currentUser, conversationId, messages])
+  }, [currentUser, conversationId]) // Removed 'messages' from dependencies
 
   // Load older messages when scrolling to top
   const loadMoreMessages = async () => {
@@ -380,8 +430,11 @@ export default function Home() {
       return
     }
 
+    const replyToId = replyingTo?.id
+
     setMessageInput('')
     setMessageError('')
+    setReplyingTo(null)
 
     // Clear typing status
     if (typingTimeoutRef.current) {
@@ -393,13 +446,18 @@ export default function Home() {
     setMessages(prev => [...prev, {
       content,
       is_admin: false,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      reply_to: replyingTo ? {
+        id: replyingTo.id!,
+        content: replyingTo.content,
+        is_admin: replyingTo.is_admin
+      } : null
     }])
 
     const res = await fetch('/api/chat/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId, content })
+      body: JSON.stringify({ conversationId, content, replyToId })
     })
 
     if (!res.ok) {
@@ -421,6 +479,79 @@ export default function Home() {
         setMessages(refreshData.messages || [])
       }
     }
+  }
+
+  const handleReaction = async (messageId: string | undefined, emoji: string) => {
+    if (!messageId || !conversationId) return
+    
+    setActiveReactionPicker(null)
+    
+    // Optimistic update
+    setMessages(prev => prev.map(msg => {
+      if (msg.id !== messageId) return msg
+      
+      const reactions = [...(msg.reactions || [])]
+      const existingIdx = reactions.findIndex(r => r.emoji === emoji)
+      
+      if (existingIdx >= 0) {
+        const existing = reactions[existingIdx]
+        if (existing.hasUser) {
+          // Remove user's reaction
+          if (existing.count <= 1 && !existing.hasAdmin) {
+            reactions.splice(existingIdx, 1)
+          } else {
+            reactions[existingIdx] = { ...existing, count: existing.count - 1, hasUser: false }
+          }
+        } else {
+          // Add user's reaction (replacing any existing)
+          const otherReactions = reactions.filter((r, i) => i !== existingIdx && !r.hasUser)
+          reactions.length = 0
+          reactions.push(...otherReactions, { ...existing, count: existing.count + 1, hasUser: true })
+        }
+      } else {
+        // Remove user's other reactions first
+        const cleanedReactions = reactions.map(r => 
+          r.hasUser ? { ...r, count: r.count - 1, hasUser: false } : r
+        ).filter(r => r.count > 0)
+        cleanedReactions.push({ emoji, count: 1, hasAdmin: false, hasUser: true })
+        reactions.length = 0
+        reactions.push(...cleanedReactions)
+      }
+      
+      return { ...msg, reactions }
+    }))
+    
+    // Send to server
+    await fetch('/api/chat/reactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId, emoji })
+    })
+  }
+
+  const handleReply = (msg: Message) => {
+    setReplyingTo(msg)
+    setActiveReactionPicker(null)
+  }
+
+  const cancelReply = () => {
+    setReplyingTo(null)
+  }
+
+  const showReactionPicker = (messageId: string | undefined) => {
+    if (!messageId) return
+    
+    // Clear any existing timeout
+    if (reactionPickerTimeoutRef.current) {
+      clearTimeout(reactionPickerTimeoutRef.current)
+    }
+    
+    setActiveReactionPicker(messageId)
+    
+    // Auto-hide after 5 seconds
+    reactionPickerTimeoutRef.current = setTimeout(() => {
+      setActiveReactionPicker(null)
+    }, 5000)
   }
 
   const formatTime = (timestamp: string) => {
@@ -617,14 +748,69 @@ export default function Home() {
               const showInline = shouldShowInlineTimestamp(displayMessages, i)
               
               return (
-                <div key={i} className={`message-group ${msg.is_admin ? 'received' : 'sent'}`}>
+                <div key={msg.id || i} className={`message-group ${msg.is_admin ? 'received' : 'sent'}`}>
                   {timestampType === 'header' && (
                     <div className="message-time-header">
                       {formatDateHeader(msg.created_at)}
                     </div>
                   )}
-                  <div className={`message ${msg.is_admin ? 'received' : 'sent'}`}>
+                  <div 
+                    className={`message ${msg.is_admin ? 'received' : 'sent'}`}
+                    onDoubleClick={() => currentUser && msg.id && showReactionPicker(msg.id)}
+                  >
+                    {/* Reply context */}
+                    {msg.reply_to && (
+                      <div className={`reply-context ${msg.reply_to.is_admin ? 'from-admin' : 'from-user'}`}>
+                        <div className="reply-context-label">
+                          {msg.reply_to.is_admin ? 'Rory' : 'You'}
+                        </div>
+                        <div className="reply-context-content">
+                          {msg.reply_to.content.length > 50 
+                            ? msg.reply_to.content.slice(0, 50) + '...' 
+                            : msg.reply_to.content}
+                        </div>
+                      </div>
+                    )}
                     <div className="message-bubble">{msg.content}</div>
+                    
+                    {/* Reactions */}
+                    {msg.reactions && msg.reactions.length > 0 && (
+                      <div className="message-reactions">
+                        {msg.reactions.map(r => (
+                          <button
+                            key={r.emoji}
+                            className={`reaction-badge ${r.hasUser ? 'user-reacted' : ''}`}
+                            onClick={() => currentUser && handleReaction(msg.id, r.emoji)}
+                          >
+                            <span className="reaction-emoji">{r.emoji}</span>
+                            {r.count > 1 && <span className="reaction-count">{r.count}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Reaction picker */}
+                    {activeReactionPicker === msg.id && currentUser && (
+                      <div className="reaction-picker">
+                        {REACTION_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            className="reaction-picker-btn"
+                            onClick={() => handleReaction(msg.id, emoji)}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button
+                          className="reaction-picker-btn reply-btn"
+                          onClick={() => handleReply(msg)}
+                          title="Reply"
+                        >
+                          ↩️
+                        </button>
+                      </div>
+                    )}
+                    
                     {showInline && (
                       <div className="message-time">{formatTime(msg.created_at)}</div>
                     )}
@@ -646,6 +832,26 @@ export default function Home() {
         </div>
 
         <form className="input-area" onSubmit={sendMessage}>
+          {/* Reply preview */}
+          {replyingTo && (
+            <div className="reply-preview">
+              <div className="reply-preview-content">
+                <span className="reply-preview-label">
+                  Replying to {replyingTo.is_admin ? 'Rory' : 'yourself'}
+                </span>
+                <span className="reply-preview-text">
+                  {replyingTo.content.length > 60 
+                    ? replyingTo.content.slice(0, 60) + '...' 
+                    : replyingTo.content}
+                </span>
+              </div>
+              <button type="button" className="reply-cancel" onClick={cancelReply}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          )}
           {messageError && (
             <div className={`message-error ${rateLimitCountdown > 0 ? 'rate-limited' : ''}`}>
               {rateLimitCountdown > 0 ? (
