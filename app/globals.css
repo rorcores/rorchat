@@ -642,6 +642,7 @@ body {
     right: 0;
     height: 100%;
     height: var(--visual-viewport-height, 100%);
+    transition: height 0.1s ease-out;
   }
 }
 
@@ -1018,6 +1019,13 @@ body {
   min-height: 0; /* Critical for flex child to shrink properly */
   width: 100%; /* Explicit width to prevent content-based sizing */
   position: relative;
+}
+
+/* Smooth transition for keyboard resize on mobile */
+@media (max-width: 767px) {
+  .messages-container {
+    transition: flex 0.1s ease-out;
+  }
 }
 
 /* Subtle background decorations for chat - very light flowing lines */
@@ -1732,6 +1740,7 @@ body {
     flex-direction: column;
     height: 100dvh;
     height: var(--visual-viewport-height, 100dvh);
+    transition: height 0.1s ease-out;
   }
 
   .admin-app .sidebar {
@@ -1746,7 +1755,7 @@ body {
     left: 0;
     right: 0;
     z-index: 10;
-    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), height 0.1s ease-out;
   }
 
   .admin-app .chat-area {
@@ -1758,7 +1767,7 @@ body {
     left: 0;
     right: 0;
     z-index: 5;
-    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), height 0.1s ease-out;
     display: flex;
     flex-direction: column;
   }

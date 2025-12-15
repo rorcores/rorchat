@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 export function useKeyboardHeight() {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const prevHeightRef = useRef(0)
 
   useEffect(() => {
     // Only run on client
@@ -15,12 +16,18 @@ export function useKeyboardHeight() {
     const handleResize = () => {
       // Calculate keyboard height as difference between window height and visual viewport height
       const keyboardH = window.innerHeight - visualViewport.height
-      setKeyboardHeight(Math.max(0, keyboardH))
+      const newKeyboardHeight = Math.max(0, keyboardH)
+      
+      // Detect if keyboard is opening (height increasing)
+      const isKeyboardOpening = newKeyboardHeight > prevHeightRef.current
+      prevHeightRef.current = newKeyboardHeight
+      
+      setKeyboardHeight(newKeyboardHeight)
       
       // Set CSS custom property for use in styles
       document.documentElement.style.setProperty(
         '--keyboard-height',
-        `${Math.max(0, keyboardH)}px`
+        `${newKeyboardHeight}px`
       )
       
       // Also set the visual viewport height
@@ -28,6 +35,20 @@ export function useKeyboardHeight() {
         '--visual-viewport-height',
         `${visualViewport.height}px`
       )
+      
+      // When keyboard opens, scroll the focused input into view smoothly
+      if (isKeyboardOpening && newKeyboardHeight > 100) {
+        requestAnimationFrame(() => {
+          const activeElement = document.activeElement as HTMLElement
+          if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+            // Find the messages container and scroll it to the bottom
+            const messagesContainer = document.querySelector('.messages-container')
+            if (messagesContainer) {
+              messagesContainer.scrollTop = messagesContainer.scrollHeight
+            }
+          }
+        })
+      }
     }
     
     const handleScroll = () => {
