@@ -801,6 +801,46 @@ body {
   gap: 8px;
 }
 
+/* Notification Button */
+.notification-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.notification-btn:hover {
+  background: var(--primary-light);
+  border-color: rgba(99, 91, 255, 0.2);
+  color: var(--primary);
+}
+
+.notification-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.notification-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Sidebar header actions (admin) */
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .user-menu {
   position: relative;
   z-index: 210;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
 import { validateMessageContent, checkRateLimit, MAX_MESSAGE_LENGTH } from '@/lib/validation'
+import { notifyAdminOfNewMessage } from '@/lib/push'
 
 export const runtime = 'nodejs'
 
@@ -233,6 +234,10 @@ export async function POST(request: NextRequest) {
   )
 
   await db.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId])
+
+  // Send push notification to admin (don't await - fire and forget)
+  const senderName = user.display_name || user.username || 'Someone'
+  notifyAdminOfNewMessage(senderName, message, conversationId).catch(() => {})
 
   return NextResponse.json({ message: inserted[0] })
 }

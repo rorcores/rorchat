@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { db } from '@/lib/db'
 import { ADMIN_COOKIE } from '../login/route'
+import { notifyUserOfReply } from '@/lib/push'
 
 export const runtime = 'nodejs'
 
@@ -53,6 +54,16 @@ export async function POST(request: NextRequest) {
   )
 
   await db.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId])
+
+  // Get the user_id for this conversation and send push notification
+  const { rows: convRows } = await db.query(
+    'SELECT user_id FROM conversations WHERE id = $1',
+    [conversationId]
+  )
+  if (convRows[0]?.user_id) {
+    // Don't await - fire and forget
+    notifyUserOfReply(convRows[0].user_id, message, conversationId).catch(() => {})
+  }
 
   return NextResponse.json({ message: rows[0] })
 }

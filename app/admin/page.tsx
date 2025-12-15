@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { usePushNotifications } from '@/lib/usePushNotifications'
 
 interface Conversation {
   id: string
@@ -53,6 +54,11 @@ export default function Admin() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  
+  // Push notifications for admin
+  const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
+    subscribeEndpoint: '/api/admin/push/subscribe'
+  })
 
   useEffect(() => {
     checkAdminSession()
@@ -396,7 +402,28 @@ export default function Admin() {
             <a href="/" className="logo">
               <span className="logo-text">rorchat<span className="dot">.</span></span>
             </a>
-            <span className="admin-badge">Admin</span>
+            <div className="sidebar-header-actions">
+              {/* Notification bell for admin */}
+              {pushSupported && isAuthenticated && (
+                <button 
+                  className={`notification-btn ${pushState === 'subscribed' ? 'active' : ''}`}
+                  onClick={() => pushState === 'subscribed' ? unsubscribePush() : subscribePush()}
+                  title={pushState === 'subscribed' ? 'Notifications on' : 'Enable notifications'}
+                  aria-label={pushState === 'subscribed' ? 'Disable notifications' : 'Enable notifications'}
+                >
+                  {pushState === 'subscribed' ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                  )}
+                </button>
+              )}
+              <span className="admin-badge">Admin</span>
+            </div>
           </div>
 
           <div className="stats">

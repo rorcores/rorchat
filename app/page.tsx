@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { usePushNotifications } from '@/lib/usePushNotifications'
 
 // Message validation constants (mirrored from server)
 const MAX_MESSAGE_LENGTH = 500
@@ -75,6 +76,11 @@ export default function Home() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  
+  // Push notifications
+  const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
+    subscribeEndpoint: '/api/push/subscribe'
+  })
 
   const testimonials = [
     {
@@ -702,25 +708,46 @@ export default function Home() {
           
           <div className="header-actions">
             {currentUser && (
-              <div className="user-menu">
-                <button className="user-pill" onClick={(e) => {
-                  const menu = e.currentTarget.nextElementSibling;
-                  menu?.classList.toggle('show');
-                }}>
-                  <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
-                  <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M6 9l6 6 6-6"/>
-                  </svg>
-                </button>
-                <div className="user-dropdown">
-                  <button onClick={(e) => handleSignOut(e)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
-                    </svg>
-                    Sign out
+              <>
+                {/* Notification bell */}
+                {pushSupported && (
+                  <button 
+                    className={`notification-btn ${pushState === 'subscribed' ? 'active' : ''}`}
+                    onClick={() => pushState === 'subscribed' ? unsubscribePush() : subscribePush()}
+                    title={pushState === 'subscribed' ? 'Notifications on' : 'Enable notifications'}
+                    aria-label={pushState === 'subscribed' ? 'Disable notifications' : 'Enable notifications'}
+                  >
+                    {pushState === 'subscribed' ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+                      </svg>
+                    )}
                   </button>
+                )}
+                <div className="user-menu">
+                  <button className="user-pill" onClick={(e) => {
+                    const menu = e.currentTarget.nextElementSibling;
+                    menu?.classList.toggle('show');
+                  }}>
+                    <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
+                    <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                  <div className="user-dropdown">
+                    <button onClick={(e) => handleSignOut(e)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                      </svg>
+                      Sign out
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </header>
