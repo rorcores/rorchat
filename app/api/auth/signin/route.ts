@@ -75,14 +75,14 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       recordFailedAttempt(ip)
-      return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 })
+      return NextResponse.json({ error: 'Username not found' }, { status: 401 })
     }
 
     // Verify password
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       recordFailedAttempt(ip)
-      return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 })
+      return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
     }
     
     // Clear rate limit on successful login

@@ -56,12 +56,8 @@ function validateUsername(u: string): string | null {
 
 function validatePassword(p: string): string | null {
   if (!p || typeof p !== 'string') return 'Password is required'
-  if (p.length < 8) return 'Password must be at least 8 characters'
+  if (p.length < 6) return 'Password must be at least 6 characters'
   if (p.length > 72) return 'Password is too long'
-  // Check for basic complexity
-  if (!/[a-z]/.test(p)) return 'Password must contain a lowercase letter'
-  if (!/[A-Z]/.test(p)) return 'Password must contain an uppercase letter'
-  if (!/[0-9]/.test(p)) return 'Password must contain a number'
   return null
 }
 
