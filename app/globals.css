@@ -108,6 +108,15 @@ body {
   }
 }
 
+/* Mobile: reduce blur so background is more visible */
+@media (max-width: 767px) {
+  .auth-overlay {
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+}
+
 @keyframes overlayIn {
   from { 
     opacity: 0;
