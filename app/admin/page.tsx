@@ -54,6 +54,8 @@ export default function Admin() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  const isInitialLoadRef = useRef<boolean>(true)
+  const prevMessageCountRef = useRef<number>(0)
   
   // Push notifications for admin
   const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
@@ -62,10 +64,31 @@ export default function Admin() {
 
   useEffect(() => {
     checkAdminSession()
+    
+    // Cleanup all timeouts on unmount
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      if (reactionPickerTimeoutRef.current) clearTimeout(reactionPickerTimeoutRef.current)
+      if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current)
+    }
   }, [])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length === 0) return
+    
+    // On initial load or conversation switch, scroll instantly (no animation)
+    // On new messages, scroll smoothly
+    const isInitialOrSwitch = isInitialLoadRef.current || prevMessageCountRef.current === 0
+    const hasNewMessages = messages.length > prevMessageCountRef.current
+    
+    if (isInitialOrSwitch) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+      isInitialLoadRef.current = false
+    } else if (hasNewMessages) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+    
+    prevMessageCountRef.current = messages.length
   }, [messages])
 
   useEffect(() => {
@@ -291,17 +314,47 @@ export default function Admin() {
   }
 
   const selectConversation = (conv: Conversation) => {
+    // Clear any pending timeouts from previous conversation
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
+    }
+    if (reactionPickerTimeoutRef.current) {
+      clearTimeout(reactionPickerTimeoutRef.current)
+      reactionPickerTimeoutRef.current = null
+    }
+    
     setSelectedConv(conv)
     setMobileView('chat')
     setReplyingTo(null)
     setActiveReactionPicker(null)
+    // Reset scroll tracking for new conversation
+    isInitialLoadRef.current = true
+    prevMessageCountRef.current = 0
     // Messages will be loaded by the useEffect when selectedConv changes
   }
 
   const goBackToList = () => {
+    // Clear all pending timeouts to prevent stale state updates
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
+    }
+    if (reactionPickerTimeoutRef.current) {
+      clearTimeout(reactionPickerTimeoutRef.current)
+      reactionPickerTimeoutRef.current = null
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = null
+    }
+    
     setMobileView('list')
+    setSelectedConv(null) // Clear selected conversation to stop message polling
+    setMessages([]) // Clear messages to prevent stale data
     setReplyingTo(null)
     setActiveReactionPicker(null)
+    setIsUserTyping(false)
   }
 
   const sendReply = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -437,22 +490,28 @@ export default function Admin() {
             {conversations.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon">💬</div>
-                <p>No conversations yet</p>
+                <h3>No conversations yet</h3>
+                <p>When someone messages you, their conversation will appear here</p>
               </div>
             ) : (
-              conversations.map(conv => (
-                <div
-                  key={conv.id}
-                  className={`conversation-item ${selectedConv?.id === conv.id ? 'active' : ''}`}
-                  onClick={() => selectConversation(conv)}
-                >
-                  <div className="conversation-header">
-                    <span className="conversation-name">{getDisplayName(conv)}</span>
-                    <span className="conversation-time">{formatTime(conv.updated_at)}</span>
+              <>
+                {conversations.map(conv => (
+                  <div
+                    key={conv.id}
+                    className={`conversation-item ${selectedConv?.id === conv.id ? 'active' : ''}`}
+                    onClick={() => selectConversation(conv)}
+                  >
+                    <div className="conversation-header">
+                      <span className="conversation-name">{getDisplayName(conv)}</span>
+                      <span className="conversation-time">{formatTime(conv.updated_at)}</span>
+                    </div>
+                    <div className="conversation-preview">@{getUsername(conv)}</div>
                   </div>
-                  <div className="conversation-preview">@{getUsername(conv)}</div>
+                ))}
+                <div className="conversations-footer">
+                  <div className="footer-decoration"></div>
                 </div>
-              ))
+              </>
             )}
           </div>
         </aside>
@@ -462,7 +521,7 @@ export default function Admin() {
             <div className="chat-empty">
               <div className="chat-empty-icon">📬</div>
               <h2>Select a conversation</h2>
-              <p>Choose from the list to reply</p>
+              <p>Choose a conversation from the list to view messages and reply</p>
             </div>
           ) : (
             <>
