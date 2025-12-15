@@ -108,12 +108,17 @@ body {
   }
 }
 
-/* Mobile: reduce blur so background is more visible */
+/* Mobile: no background tint so preview message is clearly visible */
 @media (max-width: 767px) {
   .auth-overlay {
-    background: rgba(0, 0, 0, 0.25);
+    background: transparent;
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
+  }
+  
+  /* Hide timestamp header in preview mode so message is at the top */
+  .chat-view.preview-mode .message-time-header {
+    display: none;
   }
 }
 
