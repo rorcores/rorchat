@@ -4,6 +4,20 @@ import { db } from './db'
 const SESSION_COOKIE = 'session'
 const SESSION_TTL_DAYS = 30
 
+// Clean up expired sessions periodically (runs at most once per hour per process)
+let lastCleanup = 0
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+
+async function maybeCleanupExpiredSessions() {
+  const now = Date.now()
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return
+  lastCleanup = now
+  
+  // Run cleanup in background, don't await
+  db.query('DELETE FROM sessions WHERE expires_at < now()').catch(() => {})
+  db.query('DELETE FROM admin_sessions WHERE expires_at < now()').catch(() => {})
+}
+
 export function generateSessionToken(): string {
   // 32 bytes -> 256 bits
   return crypto.randomBytes(32).toString('base64url')
@@ -37,6 +51,9 @@ export async function createUserSession(userId: string) {
 }
 
 export async function getUserFromSessionToken(token: string) {
+  // Trigger background cleanup occasionally
+  maybeCleanupExpiredSessions()
+  
   const tokenHash = hashToken(token)
 
   const { rows } = await db.query(

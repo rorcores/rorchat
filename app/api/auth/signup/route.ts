@@ -8,6 +8,41 @@ const USERNAME_MAX = 16
 const USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED = ['admin', 'root', 'system', 'rory', 'rorchat', 'support', 'mod', 'staff', 'api', 'www']
 
+// Rate limiting for signups (more strict to prevent spam)
+const signupAttempts = new Map<string, { count: number; resetAt: number }>()
+const MAX_SIGNUPS = 3  // Max signups per IP per hour
+const SIGNUP_WINDOW_MINUTES = 60
+
+function getClientIP(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+         request.headers.get('x-real-ip') || 
+         'unknown'
+}
+
+function checkSignupRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now()
+  const record = signupAttempts.get(ip)
+  
+  if (record && now < record.resetAt) {
+    if (record.count >= MAX_SIGNUPS) {
+      return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) }
+    }
+  }
+  
+  return { allowed: true }
+}
+
+function recordSignup(ip: string): void {
+  const now = Date.now()
+  const record = signupAttempts.get(ip)
+  
+  if (!record || now >= record.resetAt) {
+    signupAttempts.set(ip, { count: 1, resetAt: now + SIGNUP_WINDOW_MINUTES * 60 * 1000 })
+  } else {
+    record.count++
+  }
+}
+
 function validateUsername(u: string): string | null {
   if (!u || typeof u !== 'string') return 'Username is required'
   const clean = u.trim().toLowerCase()
@@ -21,12 +56,30 @@ function validateUsername(u: string): string | null {
 
 function validatePassword(p: string): string | null {
   if (!p || typeof p !== 'string') return 'Password is required'
-  if (p.length < 6) return 'Password must be at least 6 characters'
+  if (p.length < 8) return 'Password must be at least 8 characters'
   if (p.length > 72) return 'Password is too long'
+  // Check for basic complexity
+  if (!/[a-z]/.test(p)) return 'Password must contain a lowercase letter'
+  if (!/[A-Z]/.test(p)) return 'Password must contain an uppercase letter'
+  if (!/[0-9]/.test(p)) return 'Password must contain a number'
   return null
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIP(request)
+  
+  // Check rate limit
+  const rateLimit = checkSignupRateLimit(ip)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many signups. Please try again later.' },
+      { 
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfter) }
+      }
+    )
+  }
+
   try {
     const { username, password } = await request.json()
 
@@ -60,6 +113,9 @@ export async function POST(request: NextRequest) {
 
     const user = userRows[0]
     if (!user) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
+
+    // Record signup for rate limiting
+    recordSignup(ip)
 
     const { token } = await createUserSession(user.id)
 
