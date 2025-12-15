@@ -108,12 +108,12 @@ body {
   }
 }
 
-/* Mobile: no background tint so preview message is clearly visible */
+/* Mobile: no blur, just slight darkening so preview message is clearly visible */
 @media (max-width: 767px) {
   .auth-overlay {
-    background: transparent;
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.15);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   
   /* Hide timestamp header in preview mode so message is at the top */
@@ -2556,18 +2556,22 @@ body {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  width: 100%;
 }
 
 .reply-area {
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .reply-area .reply-input-wrapper {
   flex: 1;
+  width: 100%;
 }
 
 .reply-area .reply-input {
   flex: 1;
+  min-width: 0; /* Allow flex item to shrink below content size */
 }
 

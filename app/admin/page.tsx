@@ -83,9 +83,36 @@ export default function Admin() {
   useEffect(() => {
     if (!isAuthenticated || !selectedConv) return
 
-    loadMessages(selectedConv.id, true) // Force initial load
-    const interval = setInterval(() => loadMessages(selectedConv.id), 2000)
-    return () => clearInterval(interval)
+    // Clear messages immediately when switching conversations to prevent stale data
+    setMessages([])
+    setIsUserTyping(false)
+    
+    // Track if this effect is still current (prevents stale responses from overwriting)
+    let isCurrent = true
+    const convId = selectedConv.id
+    
+    const loadMessagesForConv = async (force = false) => {
+      if (!isCurrent) return
+      // Skip refresh if an optimistic update happened in the last 3 seconds
+      if (!force && Date.now() - lastOptimisticUpdateRef.current < 3000) {
+        return
+      }
+      
+      const res = await fetch(`/api/admin/messages?conversationId=${encodeURIComponent(convId)}`)
+      if (!res.ok || !isCurrent) return
+      const data = await res.json()
+      if (!isCurrent) return // Double-check after async
+      setMessages(data.messages || [])
+      setIsUserTyping(data.userTyping || false)
+    }
+    
+    loadMessagesForConv(true) // Force initial load
+    const interval = setInterval(() => loadMessagesForConv(), 2000)
+    
+    return () => {
+      isCurrent = false
+      clearInterval(interval)
+    }
   }, [isAuthenticated, selectedConv?.id])
 
   const checkAdminSession = async () => {
@@ -119,19 +146,6 @@ export default function Admin() {
     setConversations(data.conversations || [])
   }
 
-  const loadMessages = async (conversationId: string, force = false) => {
-    // Skip refresh if an optimistic update happened in the last 3 seconds
-    // This prevents polling from overwriting optimistic reaction/message updates
-    if (!force && Date.now() - lastOptimisticUpdateRef.current < 3000) {
-      return
-    }
-    
-    const res = await fetch(`/api/admin/messages?conversationId=${encodeURIComponent(conversationId)}`)
-    if (!res.ok) return
-    const data = await res.json()
-    setMessages(data.messages || [])
-    setIsUserTyping(data.userTyping || false)
-  }
 
   // Send typing status to server
   const sendTypingStatus = async (isTyping: boolean) => {
@@ -270,12 +284,12 @@ export default function Admin() {
     }
   }
 
-  const selectConversation = async (conv: Conversation) => {
+  const selectConversation = (conv: Conversation) => {
     setSelectedConv(conv)
     setMobileView('chat')
     setReplyingTo(null)
     setActiveReactionPicker(null)
-    await loadMessages(conv.id, true) // Force load when switching conversations
+    // Messages will be loaded by the useEffect when selectedConv changes
   }
 
   const goBackToList = () => {
