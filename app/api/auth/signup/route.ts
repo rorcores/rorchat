@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { createUserSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth'
 
+export const runtime = 'nodejs'
+
 const USERNAME_MIN = 3
 const USERNAME_MAX = 16
 const USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]*$/
@@ -119,7 +121,8 @@ export async function POST(request: NextRequest) {
     response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions())
 
     return response
-  } catch {
+  } catch (err) {
+    console.error('[api/auth/signup] error', err)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
 }

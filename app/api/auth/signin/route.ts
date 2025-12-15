@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { createUserSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth'
 
+export const runtime = 'nodejs'
+
 // Simple in-memory rate limiting
 const loginAttempts = new Map<string, { count: number; resetAt: number }>()
 const MAX_ATTEMPTS = 10
@@ -97,7 +99,8 @@ export async function POST(request: NextRequest) {
     response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions())
 
     return response
-  } catch {
+  } catch (err) {
+    console.error('[api/auth/signin] error', err)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
 }

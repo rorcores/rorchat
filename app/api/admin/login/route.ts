@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 const ADMIN_COOKIE = 'admin_session'
 const ADMIN_TTL_DAYS = 30
 

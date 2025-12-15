@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // Check if admin has been active in the last 30 seconds
 const ONLINE_THRESHOLD_MS = 30_000
 
@@ -22,7 +24,8 @@ export async function GET() {
     const online = (now - lastSeen) < ONLINE_THRESHOLD_MS
 
     return NextResponse.json({ online })
-  } catch {
+  } catch (err) {
+    console.error('[api/admin/status] error', err)
     return NextResponse.json({ online: false })
   }
 }

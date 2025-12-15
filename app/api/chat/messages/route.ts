@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

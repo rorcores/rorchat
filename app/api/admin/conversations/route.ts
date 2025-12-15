@@ -3,6 +3,8 @@ import crypto from 'crypto'
 import { db } from '@/lib/db'
 import { ADMIN_COOKIE } from '../login/route'
 
+export const runtime = 'nodejs'
+
 function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
