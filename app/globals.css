@@ -625,15 +625,15 @@ body {
 .chat-view {
   display: flex;
   height: 100%;
-  height: 100dvh;
-  height: var(--visual-viewport-height, 100dvh);
+  height: 100svh;
+  height: var(--visual-viewport-height, 100svh);
   flex-direction: column;
   background: var(--bg);
   position: relative;
   overflow: hidden;
 }
 
-/* Mobile: use fixed positioning for keyboard handling */
+/* Mobile keyboard handling */
 @media (max-width: 767px) {
   .chat-view {
     position: fixed;
@@ -641,6 +641,18 @@ body {
     left: 0;
     right: 0;
     height: var(--visual-viewport-height, 100%);
+    /* Match iOS keyboard animation timing (~300ms ease-out) */
+    transition: height 0.3s ease-out;
+  }
+  
+  /* Header stays fixed at top */
+  .chat-view .chat-header {
+    flex-shrink: 0;
+  }
+  
+  /* Input area stays at bottom */
+  .chat-view .input-area {
+    flex-shrink: 0;
   }
 }
 
@@ -1731,6 +1743,7 @@ body {
     flex-direction: column;
     height: 100dvh;
     height: var(--visual-viewport-height, 100dvh);
+    transition: height 0.3s ease-out;
   }
 
   .admin-app .sidebar {
@@ -1745,7 +1758,7 @@ body {
     left: 0;
     right: 0;
     z-index: 10;
-    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), height 0.3s ease-out;
   }
 
   .admin-app .chat-area {
@@ -1757,7 +1770,7 @@ body {
     left: 0;
     right: 0;
     z-index: 5;
-    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), height 0.3s ease-out;
     display: flex;
     flex-direction: column;
   }

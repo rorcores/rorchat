@@ -1,92 +1,109 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function useKeyboardHeight() {
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastHeightRef = useRef<number>(typeof window !== 'undefined' ? window.innerHeight : 0)
-  const isAnimatingRef = useRef(false)
+  const lastKnownKeyboardHeight = useRef<number>(0)
+  const isKeyboardOpen = useRef(false)
 
   useEffect(() => {
-    // Only run on client
     if (typeof window === 'undefined') return
 
     const visualViewport = window.visualViewport
-    if (!visualViewport) return
+    const initialHeight = window.innerHeight
 
-    // Set initial height
-    lastHeightRef.current = window.innerHeight
+    // Set initial viewport height
     document.documentElement.style.setProperty(
       '--visual-viewport-height',
-      `${window.innerHeight}px`
+      `${initialHeight}px`
     )
 
-    const applyHeight = (height: number) => {
-      document.documentElement.style.setProperty(
-        '--visual-viewport-height',
-        `${height}px`
-      )
-      document.documentElement.style.setProperty(
-        '--keyboard-height',
-        `${Math.max(0, window.innerHeight - height)}px`
-      )
-      setKeyboardHeight(Math.max(0, window.innerHeight - height))
-      lastHeightRef.current = height
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        isKeyboardOpen.current = true
+        document.body.classList.add('keyboard-open')
+        
+        // Use last known keyboard height or estimate based on screen size
+        // Typical iOS keyboard is ~40-45% of screen height
+        const estimatedKeyboardHeight = lastKnownKeyboardHeight.current || Math.round(initialHeight * 0.4)
+        const estimatedViewportHeight = initialHeight - estimatedKeyboardHeight
+        
+        // Immediately set to estimated height for smooth transition
+        document.documentElement.style.setProperty(
+          '--visual-viewport-height',
+          `${estimatedViewportHeight}px`
+        )
+        
+        // Scroll messages to bottom
+        setTimeout(() => {
+          const messagesContainer = document.querySelector('.messages-container')
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight
+          }
+        }, 50)
+      }
     }
 
-    const handleResize = () => {
-      const newHeight = visualViewport.height
-      
-      // If height changed significantly (keyboard opening/closing)
-      if (Math.abs(newHeight - lastHeightRef.current) > 50) {
-        // Clear any pending timeout
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-        }
-        
-        // Mark as animating
-        isAnimatingRef.current = true
-        
-        // Debounce: wait for animation to settle before applying
-        timeoutRef.current = setTimeout(() => {
-          applyHeight(visualViewport.height)
-          isAnimatingRef.current = false
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const active = document.activeElement
+        if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) {
+          isKeyboardOpen.current = false
+          document.body.classList.remove('keyboard-open')
           
-          // Scroll messages to bottom after resize settles
-          requestAnimationFrame(() => {
-            const messagesContainer = document.querySelector('.messages-container')
-            if (messagesContainer) {
-              messagesContainer.scrollTop = messagesContainer.scrollHeight
-            }
-          })
-        }, 150)
-      } else if (!isAnimatingRef.current) {
-        // Small change and not animating - apply immediately
-        applyHeight(newHeight)
-      }
+          // Restore full height
+          document.documentElement.style.setProperty(
+            '--visual-viewport-height',
+            `${initialHeight}px`
+          )
+        }
+      }, 100)
     }
-    
-    const handleScroll = () => {
-      // Prevent the page from scrolling when keyboard causes viewport offset
-      if (visualViewport.offsetTop > 0) {
-        window.scrollTo(0, 0)
+
+    if (visualViewport) {
+      // Track actual keyboard height for future use
+      const trackKeyboardHeight = () => {
+        const keyboardHeight = initialHeight - visualViewport.height
+        if (keyboardHeight > 100) {
+          // Only update if keyboard is actually showing
+          lastKnownKeyboardHeight.current = keyboardHeight
+          
+          // If keyboard is open, update to actual height (refinement)
+          if (isKeyboardOpen.current) {
+            document.documentElement.style.setProperty(
+              '--visual-viewport-height',
+              `${visualViewport.height}px`
+            )
+          }
+        }
+      }
+      
+      const preventScroll = () => {
+        if (visualViewport.offsetTop > 0) {
+          window.scrollTo(0, 0)
+        }
+      }
+
+      visualViewport.addEventListener('resize', trackKeyboardHeight)
+      visualViewport.addEventListener('scroll', preventScroll)
+      document.addEventListener('focusin', handleFocusIn)
+      document.addEventListener('focusout', handleFocusOut)
+
+      return () => {
+        visualViewport.removeEventListener('resize', trackKeyboardHeight)
+        visualViewport.removeEventListener('scroll', preventScroll)
+        document.removeEventListener('focusin', handleFocusIn)
+        document.removeEventListener('focusout', handleFocusOut)
       }
     }
 
-    visualViewport.addEventListener('resize', handleResize)
-    visualViewport.addEventListener('scroll', handleScroll)
-    window.addEventListener('resize', handleResize)
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
 
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      visualViewport.removeEventListener('resize', handleResize)
-      visualViewport.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('resize', handleResize)
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
     }
   }, [])
-
-  return keyboardHeight
 }
