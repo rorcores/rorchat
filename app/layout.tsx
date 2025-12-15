@@ -16,7 +16,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'rorchat. — Talk to Rory.',
   description: 'Start a conversation with Rory. Simple, fast, straightforward.',
-  metadataBase: new URL('https://rorchat.com'),
+  metadataBase: new URL('https://ror.chat'),
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -28,15 +28,24 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'rorchat. — Talk to Rory.',
     description: 'Start a conversation with Rory. Simple, fast, straightforward.',
-    url: 'https://rorchat.com',
+    url: 'https://ror.chat',
     siteName: 'rorchat.',
     locale: 'en_US',
     type: 'website',
+    images: [
+      {
+        url: 'https://ror.chat/opengraph-image.jpg',
+        width: 2848,
+        height: 1504,
+        alt: 'rorchat. — Reach Rory, Today',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'rorchat. — Talk to Rory.',
     description: 'Start a conversation with Rory. Simple, fast, straightforward.',
+    images: ['https://ror.chat/opengraph-image.jpg'],
   },
 }
 

@@ -31,10 +31,10 @@ export default function Home() {
     {
       quote: "When Rory wasn't texting back, I used Rorchat and got a response within minutes!",
       author: "Elliot",
-      title: "CoFounded a company with Rory"
+      title: "Friend of Rory"
     },
     {
-      quote: "I used Rorchat to let Rory know that I had his mail while he was travelling and I haaaated it",
+      quote: "I used Rorchat to let Rory know that I had his mail while he was travelling!",
       author: "Guy",
       title: "Rory's upstairs neighbor, New York"
     },
