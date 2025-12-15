@@ -3,6 +3,12 @@ import { Pool } from 'pg'
 // Server-side only. Do NOT expose this via NEXT_PUBLIC_*
 let pool: Pool | null = null
 
+function normalizeConnectionString(raw: string): string {
+  // Vercel env vars sometimes get pasted with whitespace or wrapped in quotes.
+  const trimmed = raw.trim()
+  return trimmed.replace(/^["'](.*)["']$/, '$1')
+}
+
 function shouldUseSSL(connectionString: string): boolean {
   // Allow explicit disable via env or connection string.
   if ((process.env.PGSSLMODE || '').toLowerCase() === 'disable') return false
@@ -13,11 +19,25 @@ function shouldUseSSL(connectionString: string): boolean {
 
 function getPool() {
   if (pool) return pool
-  const connectionString = process.env.DATABASE_URL
-  if (!connectionString) {
+  const rawConnectionString = process.env.DATABASE_URL
+  if (!rawConnectionString) {
     // Important: don't throw at import-time (Next.js may import during build).
     throw new Error('DATABASE_URL is not set')
   }
+  const connectionString = normalizeConnectionString(rawConnectionString)
+
+  // Validate early so we fail with a clear message (pg-connection-string can crash with a vague TypeError).
+  try {
+    // eslint-disable-next-line no-new
+    new URL(connectionString)
+  } catch {
+    throw new Error(
+      'DATABASE_URL is invalid. Ensure it is a full URL like postgresql://user:password@host:5432/db?sslmode=require. ' +
+        'If your password contains special characters (like @ : / # ?), it must be URL-encoded. ' +
+        'Also ensure the value is not wrapped in quotes.'
+    )
+  }
+
   const ssl = shouldUseSSL(connectionString) ? { rejectUnauthorized: false } : undefined
 
   pool = new Pool({
