@@ -54,7 +54,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
-  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
+  const [authLoading, setAuthLoading] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [isAdminOnline, setIsAdminOnline] = useState(false)
@@ -75,6 +75,7 @@ export default function Home() {
   const reactionPickerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
+  const lastOptimisticUpdateRef = useRef<number>(0)
 
   const testimonials = [
     {
@@ -214,6 +215,12 @@ export default function Home() {
 
     let cancelled = false
     const interval = setInterval(async () => {
+      // Skip poll if an optimistic update happened in the last 3 seconds
+      // This prevents polling from interfering with optimistic reaction/message updates
+      if (Date.now() - lastOptimisticUpdateRef.current < 3000) {
+        return
+      }
+      
       // Use functional state to get the latest messages without adding to dependencies
       let lastMessageId: string | null = null
       setMessages(prev => {
@@ -361,52 +368,33 @@ export default function Home() {
     }, 2000)
   }
 
-  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
+    setAuthLoading(true)
 
     const form = e.currentTarget
     const username = (form.elements.namedItem('username') as HTMLInputElement).value
     const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    })
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
 
-    const data = await res.json()
+      const data = await res.json()
 
-    if (!res.ok) {
-      setError(data.error || 'Signup failed')
-      return
+      if (!res.ok) {
+        setError(data.error || 'Authentication failed')
+        return
+      }
+
+      setCurrentUser(data.user)
+    } finally {
+      setAuthLoading(false)
     }
-
-    setCurrentUser(data.user)
-  }
-
-  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError('')
-
-    const form = e.currentTarget
-    const username = (form.elements.namedItem('username') as HTMLInputElement).value
-    const password = (form.elements.namedItem('password') as HTMLInputElement).value
-
-    const res = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      setError(data.error || 'Sign in failed')
-      return
-    }
-
-    setCurrentUser(data.user)
   }
 
   const handleSignOut = async () => {
@@ -443,6 +431,9 @@ export default function Home() {
       clearTimeout(typingTimeoutRef.current)
     }
     sendTypingStatus(false)
+
+    // Mark that an optimistic update is happening
+    lastOptimisticUpdateRef.current = Date.now()
 
     // Optimistic update
     setMessages(prev => [...prev, {
@@ -487,6 +478,9 @@ export default function Home() {
     if (!messageId || !conversationId) return
     
     setActiveReactionPicker(null)
+    
+    // Mark that an optimistic update is happening
+    lastOptimisticUpdateRef.current = Date.now()
     
     // Optimistic update
     setMessages(prev => prev.map(msg => {
@@ -972,48 +966,22 @@ export default function Home() {
             </div>
 
             <div className="auth-card">
-              <div className="auth-tabs">
-                <button 
-                  className={`auth-tab ${activeTab === 'signin' ? 'active' : ''}`}
-                  onClick={() => { setActiveTab('signin'); setError('') }}
-                >
-                  Sign in
-                </button>
-                <button 
-                  className={`auth-tab ${activeTab === 'signup' ? 'active' : ''}`}
-                  onClick={() => { setActiveTab('signup'); setError('') }}
-                >
-                  Create account
-                </button>
-              </div>
-
               {error && <div className="auth-error show">{error}</div>}
 
-              {activeTab === 'signin' ? (
-                <form className="auth-form" onSubmit={handleSignIn}>
-                  <div className="input-group">
-                    <label>Username</label>
-                    <input type="text" name="username" placeholder="Your username" required autoComplete="username" autoCapitalize="none" />
-                  </div>
-                  <div className="input-group">
-                    <label>Password</label>
-                    <input type="password" name="password" placeholder="Your password" required autoComplete="current-password" />
-                  </div>
-                  <button type="submit" className="auth-btn">Sign in</button>
-                </form>
-              ) : (
-                <form className="auth-form" onSubmit={handleSignUp}>
-                  <div className="input-group">
-                    <label>Username</label>
-                    <input type="text" name="username" placeholder="Pick a username" required autoComplete="username" autoCapitalize="none" minLength={3} maxLength={16} />
-                  </div>
-                  <div className="input-group">
-                    <label>Password</label>
-                    <input type="password" name="password" placeholder="Create a password" minLength={6} required autoComplete="new-password" />
-                  </div>
-                  <button type="submit" className="auth-btn">Create account</button>
-                </form>
-              )}
+              <form className="auth-form" onSubmit={handleAuth}>
+                <div className="input-group">
+                  <label>Username</label>
+                  <input type="text" name="username" placeholder="Enter username" required autoComplete="username" autoCapitalize="none" minLength={2} maxLength={16} />
+                </div>
+                <div className="input-group">
+                  <label>Password</label>
+                  <input type="password" name="password" placeholder="Enter password" minLength={6} required autoComplete="current-password" />
+                </div>
+                <button type="submit" className="auth-btn" disabled={authLoading}>
+                  {authLoading ? 'Loading...' : 'Continue'}
+                </button>
+                <p className="auth-hint">New here? Just pick a username and password to create your account.</p>
+              </form>
             </div>
 
             {/* Testimonials */}

@@ -52,6 +52,7 @@ export default function Admin() {
   const reactionPickerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
+  const lastOptimisticUpdateRef = useRef<number>(0)
 
   useEffect(() => {
     checkAdminSession()
@@ -82,7 +83,7 @@ export default function Admin() {
   useEffect(() => {
     if (!isAuthenticated || !selectedConv) return
 
-    loadMessages(selectedConv.id)
+    loadMessages(selectedConv.id, true) // Force initial load
     const interval = setInterval(() => loadMessages(selectedConv.id), 2000)
     return () => clearInterval(interval)
   }, [isAuthenticated, selectedConv?.id])
@@ -118,7 +119,13 @@ export default function Admin() {
     setConversations(data.conversations || [])
   }
 
-  const loadMessages = async (conversationId: string) => {
+  const loadMessages = async (conversationId: string, force = false) => {
+    // Skip refresh if an optimistic update happened in the last 3 seconds
+    // This prevents polling from overwriting optimistic reaction/message updates
+    if (!force && Date.now() - lastOptimisticUpdateRef.current < 3000) {
+      return
+    }
+    
     const res = await fetch(`/api/admin/messages?conversationId=${encodeURIComponent(conversationId)}`)
     if (!res.ok) return
     const data = await res.json()
@@ -160,6 +167,9 @@ export default function Admin() {
     if (!messageId) return
     
     setActiveReactionPicker(null)
+    
+    // Mark that an optimistic update is happening
+    lastOptimisticUpdateRef.current = Date.now()
     
     // Optimistic update
     setMessages(prev => prev.map(msg => {
@@ -265,7 +275,7 @@ export default function Admin() {
     setMobileView('chat')
     setReplyingTo(null)
     setActiveReactionPicker(null)
-    await loadMessages(conv.id)
+    await loadMessages(conv.id, true) // Force load when switching conversations
   }
 
   const goBackToList = () => {
@@ -294,6 +304,9 @@ export default function Admin() {
       clearTimeout(typingTimeoutRef.current)
     }
     sendTypingStatus(false)
+
+    // Mark that an optimistic update is happening
+    lastOptimisticUpdateRef.current = Date.now()
 
     // Optimistic update
     setMessages(prev => [...prev, {
