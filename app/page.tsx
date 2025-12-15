@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef, TouchEvent } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 // Message validation constants (mirrored from server)
 const MAX_MESSAGE_LENGTH = 500
-const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{Emoji}\p{Emoji_Component}\s\.,!?;:'"()\[\]{}\-_@#$%&*+=\/\\|~`^<>]*$/u
+const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{Emoji}\p{Emoji_Component}\s\.,!?;:'"''""()\[\]{}\-_@#$%&*+=\/\\|~`^<>]*$/u
 
 function validateMessageContent(content: string): { valid: boolean; error?: string } {
   const trimmed = content.trim()
@@ -67,7 +67,6 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [testimonialIndex, setTestimonialIndex] = useState(0)
-  const touchStartX = useRef<number | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastTypingSentRef = useRef<number>(0)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -79,22 +78,17 @@ export default function Home() {
 
   const testimonials = [
     {
-      quote: "When Rory wasn't texting back, I used Rorchat and got a response within minutes!",
+      quote: "Use this when Rory isn't texting back!",
       author: "Elliot",
       title: "Friend of Rory"
     },
     {
-      quote: "I used Rorchat to let Rory know that I had his mail while he was travelling!",
-      author: "Guy",
-      title: "Rory's upstairs neighbor, New York"
-    },
-    {
-      quote: "Rorchat is incredibly impressive technology and I am acquiring it",
+      quote: "Rorchat is incredibly impressive technology",
       author: "Elon Musk",
       title: "tech guy"
     },
     {
-      quote: "Rory I am not going to use this to contact you, but I'm glad you made it",
+      quote: "Rory I am not going to use this to contact you",
       author: "Olivia",
       title: "Rory's other neighbor, New York"
     },
@@ -656,30 +650,6 @@ export default function Home() {
     return false
   }
 
-  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    touchStartX.current = e.touches[0].clientX
-  }
-
-  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
-    if (touchStartX.current === null) return
-    
-    const touchEndX = e.changedTouches[0].clientX
-    const diff = touchStartX.current - touchEndX
-    const threshold = 50 // minimum swipe distance
-    
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) {
-        // Swiped left - go to next
-        setTestimonialIndex((prev) => (prev + 1) % testimonials.length)
-      } else {
-        // Swiped right - go to previous
-        setTestimonialIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length)
-      }
-    }
-    
-    touchStartX.current = null
-  }
-
   // Messages to display - real ones when logged in, preview when not
   const displayMessages = currentUser ? messages : previewMessages
 
@@ -985,16 +955,11 @@ export default function Home() {
                 <button type="submit" className="auth-btn" disabled={authLoading}>
                   {authLoading ? 'Loading...' : 'Continue'}
                 </button>
-                <p className="auth-hint">New here? Just pick a username and password to create your account.</p>
               </form>
             </div>
 
             {/* Testimonials */}
-            <div 
-              className="testimonials"
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
+            <div className="testimonials">
               <div className="testimonial" key={testimonialIndex}>
                 <p className="testimonial-quote">"{testimonials[testimonialIndex].quote}"</p>
                 <p className="testimonial-author">
@@ -1003,16 +968,6 @@ export default function Home() {
                     <span className="testimonial-title"> ({testimonials[testimonialIndex].title})</span>
                   )}
                 </p>
-              </div>
-              <div className="testimonial-dots">
-                {testimonials.map((_, i) => (
-                  <button
-                    key={i}
-                    className={`testimonial-dot ${i === testimonialIndex ? 'active' : ''}`}
-                    onClick={() => setTestimonialIndex(i)}
-                    aria-label={`Go to testimonial ${i + 1}`}
-                  />
-                ))}
               </div>
             </div>
           </div>

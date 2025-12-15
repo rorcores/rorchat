@@ -283,6 +283,14 @@ body {
   opacity: 0.5;
 }
 
+.chat-view.preview-mode .message {
+  max-width: none;
+}
+
+.chat-view.preview-mode .message-bubble {
+  white-space: nowrap;
+}
+
 .logo {
   display: flex;
   align-items: center;
