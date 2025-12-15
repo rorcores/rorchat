@@ -11,9 +11,9 @@ A **sleek, professional** web chat app. Users pick a username and chat with you 
 - 📱 **Mobile-first design** - Optimized for phones
 - 🎨 **Premium aesthetics** - Subtle waves, line art, gradient orbs
 - 👤 **Simple auth** - Just username + password (no email required)
-- 🔄 **Real-time messaging** - Instant updates via Supabase
+- 🔄 **Live messaging** - Simple polling-based updates
 - ⚡ **Admin dashboard** - Manage all conversations at `/admin`
-- 🔐 **Secure** - Bcrypt password hashing, httpOnly session cookies
+- 🔐 **Secure** - Bcrypt password hashing, random session tokens (httpOnly cookies), DB locked down from anon
 
 ## How Auth Works
 
@@ -22,6 +22,7 @@ We use a **custom username/password system** (not Supabase Auth) for simplicity:
 | Component | Purpose |
 |-----------|---------|
 | `users` table | Stores username, bcrypt password hash, display name |
+| `sessions` table | Stores **hashed** session tokens with expiry |
 | `/api/auth/signup` | Validates input, hashes password, creates user |
 | `/api/auth/signin` | Verifies password, sets session cookie |
 | `/api/auth/signout` | Clears session cookie |
@@ -32,7 +33,13 @@ We use a **custom username/password system** (not Supabase Auth) for simplicity:
 - Password: 6-72 characters
 - Reserved usernames blocked (admin, root, system, etc.)
 
-**Sessions:** httpOnly cookies containing the user ID, 30-day expiry.
+**Sessions:** httpOnly cookies containing a **random token** (token is hashed in DB), 30-day expiry.
+
+## Security Model (Important)
+
+- The browser does **not** talk to Supabase tables directly.
+- All reads/writes happen via Next.js API routes using `DATABASE_URL`.
+- Public Supabase API roles (`anon`/`authenticated`) have **no privileges** on `users`, `sessions`, `conversations`, `messages` (RLS enabled + grants revoked).
 
 ## Deploy to Vercel
 
@@ -59,11 +66,10 @@ In Vercel Dashboard → Settings → Environment Variables, add:
 
 | Variable | Description |
 |----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
+| `DATABASE_URL` | Postgres connection string (server-side only) |
 | `ADMIN_PASSWORD` | Your admin dashboard password |
 
-Get your Supabase credentials from: **Supabase Dashboard → Project Settings → API**
+Get your connection string from: **Supabase Dashboard → Project Settings → Database**
 
 ## Local Development
 
@@ -95,6 +101,16 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sessions table (store hashed tokens)
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ
+);
+
 -- Conversations table
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -114,19 +130,23 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Disable RLS (we handle auth in our API routes)
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
+-- Lock down Supabase public API access (browser should not access tables directly)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE users FROM anon, authenticated;
+REVOKE ALL ON TABLE sessions FROM anon, authenticated;
+REVOKE ALL ON TABLE conversations FROM anon, authenticated;
+REVOKE ALL ON TABLE messages FROM anon, authenticated;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
-
--- Enable realtime for live updates
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
 ```
 
 ## Project Structure
@@ -140,9 +160,14 @@ rorchat/
 │   ├── admin/
 │   │   └── page.tsx        # Admin dashboard
 │   └── api/
-│       ├── admin/
-│       │   └── verify/
-│       │       └── route.ts    # Admin password check
+│       ├── admin/              # Admin API (cookie-based)
+│       │   ├── login/route.ts
+│       │   ├── me/route.ts
+│       │   ├── logout/route.ts
+│       │   ├── conversations/route.ts
+│       │   ├── messages/route.ts
+│       │   ├── reply/route.ts
+│       │   └── verify/route.ts     # Back-compat (calls login)
 │       └── auth/
 │           ├── signup/
 │           │   └── route.ts    # User registration
@@ -153,7 +178,8 @@ rorchat/
 │           └── me/
 │               └── route.ts    # Get current user
 ├── lib/
-│   └── supabase.ts         # Supabase client
+│   ├── db.ts               # Server-side DB pool
+│   └── auth.ts             # Session helpers
 ├── env.example             # Environment template
 └── package.json
 ```

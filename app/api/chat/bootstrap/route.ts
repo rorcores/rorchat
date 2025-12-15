@@ -1,0 +1,46 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
+
+export async function POST(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE)?.value
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const user = await getUserFromSessionToken(token)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // get or create conversation for user
+  const { rows: existingRows } = await db.query(
+    'SELECT id FROM conversations WHERE user_id = $1 LIMIT 1',
+    [user.id]
+  )
+
+  let conversationId = existingRows[0]?.id as string | undefined
+
+  if (!conversationId) {
+    const { rows: createdRows } = await db.query(
+      `INSERT INTO conversations (user_id, visitor_id, visitor_name)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [user.id, user.id, user.display_name || user.username]
+    )
+    conversationId = createdRows[0]?.id
+  }
+
+  if (!conversationId) {
+    return NextResponse.json({ error: 'Failed to initialize chat' }, { status: 500 })
+  }
+
+  const { rows: messages } = await db.query(
+    `SELECT id, content, is_admin, created_at
+     FROM messages
+     WHERE conversation_id = $1
+     ORDER BY created_at ASC`,
+    [conversationId]
+  )
+
+  return NextResponse.json({
+    conversationId,
+    messages
+  })
+}

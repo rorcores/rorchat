@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { db } from '@/lib/db'
+import { createUserSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,14 +12,13 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanUsername = username.trim().toLowerCase()
-    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Find user
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, username, display_name, password_hash')
-      .eq('username', cleanUsername)
-      .single()
+    const { rows } = await db.query(
+      'SELECT id, username, display_name, password_hash FROM users WHERE username = $1 LIMIT 1',
+      [cleanUsername]
+    )
+    const user = rows[0]
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 })
@@ -33,17 +30,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 })
     }
 
-    // Set session cookie
+    const { token } = await createUserSession(user.id)
+
     const response = NextResponse.json({
       success: true,
       user: { id: user.id, username: user.username, display_name: user.display_name }
     })
-    response.cookies.set('session', user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
-    })
+    response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions())
 
     return response
   } catch {

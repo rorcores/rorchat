@@ -15,7 +15,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: 'rorchat. — Talk to Rory',
-  description: 'Start a conversation and get a response. Simple, fast, straightforward.',
+  description: 'The easiest way to reach Rory, and it\'s free.',
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23000' width='100' height='100' rx='22'/><text x='50' y='66' text-anchor='middle' fill='white' font-size='32' font-weight='700' font-family='system-ui'>rc</text><circle cx='74' cy='58' r='6' fill='%230071e3'/></svg>",
   },

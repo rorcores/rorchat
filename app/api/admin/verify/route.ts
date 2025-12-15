@@ -1,23 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { POST as login } from '../login/route'
 
-export async function POST(request: Request) {
-  const { password } = await request.json()
-  const adminPassword = process.env.ADMIN_PASSWORD
-
-  if (!adminPassword) {
-    return NextResponse.json(
-      { error: 'Admin password not configured' },
-      { status: 500 }
-    )
-  }
-
-  if (password === adminPassword) {
-    return NextResponse.json({ success: true })
-  }
-
-  return NextResponse.json(
-    { error: 'Invalid password' },
-    { status: 401 }
-  )
+export async function POST(request: NextRequest) {
+  // Backwards-compat: old admin UI posts to /api/admin/verify
+  return login(request)
 }
 

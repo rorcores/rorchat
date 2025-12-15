@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { db } from '@/lib/db'
+import { createUserSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth'
 
 const USERNAME_MIN = 3
 const USERNAME_MAX = 16
@@ -39,44 +37,34 @@ export async function POST(request: NextRequest) {
     if (pErr) return NextResponse.json({ error: pErr }, { status: 400 })
 
     const cleanUsername = username.trim().toLowerCase()
-    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Check if username taken
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', cleanUsername)
-      .single()
+    const { rows: existingRows } = await db.query(
+      'SELECT id FROM users WHERE username = $1 LIMIT 1',
+      [cleanUsername]
+    )
 
-    if (existing) {
+    if (existingRows.length > 0) {
       return NextResponse.json({ error: 'Username is already taken' }, { status: 409 })
     }
 
     // Hash password and create user
     const passwordHash = await bcrypt.hash(password, 10)
 
-    const { data: user, error: insertErr } = await supabase
-      .from('users')
-      .insert({
-        username: cleanUsername,
-        password_hash: passwordHash,
-        display_name: cleanUsername
-      })
-      .select('id, username, display_name')
-      .single()
+    const { rows: userRows } = await db.query(
+      `INSERT INTO users (username, password_hash, display_name)
+       VALUES ($1, $2, $3)
+       RETURNING id, username, display_name`,
+      [cleanUsername, passwordHash, cleanUsername]
+    )
 
-    if (insertErr || !user) {
-      return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
-    }
+    const user = userRows[0]
+    if (!user) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
 
-    // Set session cookie
-    const response = NextResponse.json({ success: true, user: { id: user.id, username: user.username } })
-    response.cookies.set('session', user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
-    })
+    const { token } = await createUserSession(user.id)
+
+    const response = NextResponse.json({ success: true, user: { id: user.id, username: user.username, display_name: user.display_name } })
+    response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions())
 
     return response
   } catch {

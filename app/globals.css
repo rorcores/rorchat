@@ -310,6 +310,68 @@ body {
   display: block;
 }
 
+/* Testimonials */
+.testimonials {
+  margin-top: 32px;
+  max-width: 380px;
+  text-align: center;
+}
+
+.testimonial {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.testimonial-quote {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 12px;
+}
+
+.testimonial-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.testimonial-title {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.testimonial-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.testimonial-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.testimonial-dot.active {
+  background: var(--primary);
+  transform: scale(1.2);
+}
+
+.testimonial-dot:hover {
+  background: var(--text-muted);
+}
+
 /* Chat View */
 .chat-view {
   display: none;

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 interface User {
   id: string
@@ -17,7 +16,6 @@ interface Message {
 }
 
 export default function Home() {
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -25,14 +23,32 @@ export default function Home() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [testimonialIndex, setTestimonialIndex] = useState(0)
+
+  const testimonials = [
+    {
+      quote: "When Rory wasn't texting back, I used Rorchat and got a response within minutes!",
+      author: "Elliot",
+      title: "CoFounded a company with Rory"
+    },
+    {
+      quote: "I used Rorchat to let Rory know that I had his mail while he was travelling and I haaaated it",
+      author: "Guy",
+      title: "Rory's upstairs neighbor, New York"
+    },
+    {
+      quote: "Rorchat is incredibly impressive technology and I am acquiring it",
+      author: "Elon Musk",
+      title: "tech guy"
+    },
+    {
+      quote: "Rory I am not going to use this to contact you, but I'm glad you made it",
+      author: "Olivia",
+      title: "Rory's other neighbor, New York"
+    },
+  ]
 
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (url && key) {
-      setSupabase(createClient(url, key))
-    }
-
     // Check if already logged in
     checkAuth()
   }, [])
@@ -40,6 +56,13 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTestimonialIndex((prev) => (prev + 1) % testimonials.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [testimonials.length])
 
   const checkAuth = async () => {
     try {
@@ -54,66 +77,43 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (currentUser && supabase) {
-      initializeChat(supabase, currentUser)
-    }
-  }, [currentUser, supabase])
+    if (!currentUser) return
 
-  const initializeChat = async (client: SupabaseClient, user: User) => {
-    // Get or create conversation
-    const { data: existing } = await client
-      .from('conversations')
-      .select('id')
-      .eq('user_id', user.id)
-      .single()
+    let cancelled = false
 
-    let convId: string
-
-    if (existing) {
-      convId = existing.id
-    } else {
-      const { data: newConv } = await client
-        .from('conversations')
-        .insert({ 
-          user_id: user.id, 
-          visitor_name: user.display_name || user.username,
-          visitor_id: user.id
-        })
-        .select('id')
-        .single()
-      
-      convId = newConv?.id || ''
+    const bootstrap = async () => {
+      const res = await fetch('/api/chat/bootstrap', { method: 'POST' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (cancelled) return
+      setConversationId(data.conversationId)
+      setMessages(data.messages || [])
     }
 
-    setConversationId(convId)
-    
-    // Load messages
-    const { data: msgs } = await client
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: true })
-    
-    if (msgs) setMessages(msgs)
+    bootstrap()
 
-    // Subscribe to new messages
-    client
-      .channel('messages-' + convId)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `conversation_id=eq.${convId}`
-        }, 
-        (payload) => {
-          if (payload.new.is_admin) {
-            setMessages(prev => [...prev, payload.new as Message])
-          }
-        }
-      )
-      .subscribe()
-  }
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!currentUser || !conversationId) return
+
+    let cancelled = false
+    const interval = setInterval(async () => {
+      const res = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (cancelled) return
+      setMessages(data.messages || [])
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [currentUser, conversationId])
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -172,7 +172,7 @@ export default function Home() {
 
   const sendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!supabase || !conversationId) return
+    if (!conversationId) return
 
     const form = e.currentTarget
     const input = form.elements.namedItem('message') as HTMLTextAreaElement
@@ -189,16 +189,20 @@ export default function Home() {
       created_at: new Date().toISOString()
     }])
 
-    await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      content,
-      is_admin: false
+    const res = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, content })
     })
 
-    await supabase
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
+    if (!res.ok) {
+      // fallback: refresh from server
+      const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
+      if (refresh.ok) {
+        const data = await refresh.json()
+        setMessages(data.messages || [])
+      }
+    }
   }
 
   const formatTime = (timestamp: string) => {
@@ -260,7 +264,7 @@ export default function Home() {
           <div className="auth-content">
             <div className="hero">
               <h1>Reach Rory, Today</h1>
-              <p>Start a conversation and get a response. Simple, fast, straightforward.</p>
+              <p>The easiest way to reach Rory. Simple, fast, straightforward.</p>
             </div>
 
             <div className="auth-card">
@@ -307,6 +311,28 @@ export default function Home() {
                   <button type="submit" className="auth-btn">Create account</button>
                 </form>
               )}
+            </div>
+
+            {/* Testimonials */}
+            <div className="testimonials">
+              <div className="testimonial" key={testimonialIndex}>
+                <p className="testimonial-quote">"{testimonials[testimonialIndex].quote}"</p>
+                <p className="testimonial-author">
+                  — {testimonials[testimonialIndex].author}
+                  {testimonials[testimonialIndex].title && (
+                    <span className="testimonial-title"> ({testimonials[testimonialIndex].title})</span>
+                  )}
+                </p>
+              </div>
+              <div className="testimonial-dots">
+                {testimonials.map((_, i) => (
+                  <button
+                    key={i}
+                    className={`testimonial-dot ${i === testimonialIndex ? 'active' : ''}`}
+                    onClick={() => setTestimonialIndex(i)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
