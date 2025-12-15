@@ -122,6 +122,16 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (err) {
+    // Extra diagnostics (no secrets): helps detect Vercel env overrides like PGHOST.
+    console.error('[api/auth/signup] env', {
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV,
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      pgHost: process.env.PGHOST,
+      pgPort: process.env.PGPORT,
+      pgDatabase: process.env.PGDATABASE,
+      pgUser: process.env.PGUSER
+    })
     console.error('[api/auth/signup] error', err)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }

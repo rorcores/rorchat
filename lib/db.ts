@@ -59,13 +59,24 @@ function getPool() {
 
   const ssl = shouldUseSSL(connectionString) ? { rejectUnauthorized: false } : undefined
 
-  console.log('[db] init', {
+  // Use console.error so it appears even in "errors only" log views.
+  console.error('[db] init', {
     vercelEnv: process.env.VERCEL_ENV,
     nodeEnv: process.env.NODE_ENV,
     host: parsedUrl.host,
     database: parsedUrl.pathname,
     ssl: !!ssl
   })
+
+  // Hard fail with a very explicit message for the common misconfig we keep seeing.
+  // This guarantees you can see the resolved host even if other logs are hidden.
+  if (parsedUrl.hostname === 'db.supabase.co') {
+    throw new Error(
+      'DATABASE_URL points to db.supabase.co (missing project ref). ' +
+        `Current host is ${parsedUrl.host}. ` +
+        'Use db.<your-project-ref>.supabase.co from Supabase Settings → Database → Connection string.'
+    )
+  }
 
   pool = new Pool({
     connectionString,
