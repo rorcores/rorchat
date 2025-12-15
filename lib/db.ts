@@ -25,6 +25,10 @@ function shouldUseSSL(connectionString: string): boolean {
   return process.env.NODE_ENV === 'production'
 }
 
+function isSupabasePoolerHost(hostname: string): boolean {
+  return hostname.endsWith('.pooler.supabase.com')
+}
+
 function getPool() {
   if (pool) return pool
   const rawConnectionString = process.env.DATABASE_URL
@@ -81,6 +85,9 @@ function getPool() {
   pool = new Pool({
     connectionString,
     ssl,
+    // Supabase Supavisor in transaction mode doesn't support prepared statements well.
+    // This keeps it compatible when you use the "Connection pooling" URL in Supabase.
+    ...(isSupabasePoolerHost(parsedUrl.hostname) ? { preferSimpleProtocol: true } : {}),
     // Keep small for serverless; prefer Supabase pooler in prod.
     max: Number(process.env.PGPOOL_MAX ?? '') || 5,
     idleTimeoutMillis: 30_000,
