@@ -914,6 +914,19 @@ body {
   animation: msgIn 0.25s ease-out;
 }
 
+/* Prevent text selection on long-press (mobile/touch devices only) */
+@media (hover: none), (pointer: coarse) {
+  .message,
+  .message-bubble,
+  .reply-context {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -1266,6 +1279,22 @@ body {
   background: var(--bg);
 }
 
+/* Desktop: constrain admin width and center */
+@media (min-width: 769px) {
+  .admin-app {
+    max-width: 1100px;
+    width: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 16px;
+    top: 24px;
+    bottom: 24px;
+    box-shadow: 
+      0 0 0 1px rgba(0, 0, 0, 0.08),
+      0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+}
+
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -1442,15 +1471,16 @@ body {
   overflow: hidden; /* Ensure content doesn't cause layout shifts */
 }
 
-/* Admin chat area - fixed width calculation on desktop */
+/* Admin chat area - use flex to fill remaining space after sidebar */
 .admin-app .chat-area {
-  width: calc(100% - 320px); /* Sidebar is 320px fixed */
-  flex: none; /* Don't use flex sizing, use explicit width */
+  flex: 1;
+  min-width: 0;
 }
 
 @media (max-width: 768px) {
   .admin-app .chat-area {
     width: 100%;
+    flex: none;
   }
 }
 
