@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { usePushNotifications } from '@/lib/usePushNotifications'
+import { useKeyboardHeight } from '@/lib/useKeyboardHeight'
 
 interface Conversation {
   id: string
@@ -56,6 +57,9 @@ export default function Admin() {
   const lastOptimisticUpdateRef = useRef<number>(0)
   const isInitialLoadRef = useRef<boolean>(true)
   const prevMessageCountRef = useRef<number>(0)
+  
+  // Handle mobile keyboard
+  useKeyboardHeight()
   
   // Push notifications for admin
   const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({

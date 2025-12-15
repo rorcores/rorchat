@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { usePushNotifications } from '@/lib/usePushNotifications'
+import { useKeyboardHeight } from '@/lib/useKeyboardHeight'
 
 // Message validation constants (mirrored from server)
 const MAX_MESSAGE_LENGTH = 500
@@ -76,6 +77,9 @@ export default function Home() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  
+  // Handle mobile keyboard
+  useKeyboardHeight()
   
   // Push notifications
   const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
