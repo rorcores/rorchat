@@ -238,12 +238,19 @@ export default function Home() {
       const res = await fetch(
         `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}&before=${encodeURIComponent(oldestMessage.id)}`
       )
-      if (!res.ok) return
+      if (!res.ok) {
+        // On error, assume no more messages to prevent infinite retry loops
+        setHasMoreMessages(false)
+        return
+      }
       const data = await res.json()
+      
+      // Always update hasMore from server response (defaults to false)
+      const hasMore = data.hasMore === true
+      setHasMoreMessages(hasMore)
       
       if (data.messages?.length > 0) {
         setMessages(prev => [...data.messages, ...prev])
-        setHasMoreMessages(data.hasMore || false)
         
         // Restore scroll position after DOM update
         requestAnimationFrame(() => {
@@ -252,9 +259,10 @@ export default function Home() {
             container.scrollTop = scrollHeightAfter - scrollHeightBefore
           }
         })
-      } else {
-        setHasMoreMessages(false)
       }
+    } catch {
+      // On network error, assume no more messages
+      setHasMoreMessages(false)
     } finally {
       setLoadingMore(false)
     }
