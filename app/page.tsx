@@ -73,6 +73,8 @@ export default function Home() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null)
   const reactionPickerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const longPressTriggeredRef = useRef<boolean>(false)
 
   const testimonials = [
     {
@@ -554,6 +556,41 @@ export default function Home() {
     }, 5000)
   }
 
+  const hideReactionPicker = () => {
+    if (reactionPickerTimeoutRef.current) {
+      clearTimeout(reactionPickerTimeoutRef.current)
+    }
+    setActiveReactionPicker(null)
+  }
+
+  // Long press handlers for mobile
+  const handleMessageTouchStart = (messageId: string | undefined) => {
+    if (!messageId || !currentUser) return
+    
+    longPressTriggeredRef.current = false
+    longPressTimeoutRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true
+      showReactionPicker(messageId)
+      // Vibrate on mobile if supported
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    }, 500) // 500ms long press
+  }
+
+  const handleMessageTouchEnd = () => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+    }
+  }
+
+  const handleMessageTouchMove = () => {
+    // Cancel long press if user moves finger
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+    }
+  }
+
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
@@ -755,8 +792,10 @@ export default function Home() {
                     </div>
                   )}
                   <div 
-                    className={`message ${msg.is_admin ? 'received' : 'sent'}`}
-                    onDoubleClick={() => currentUser && msg.id && showReactionPicker(msg.id)}
+                    className={`message ${msg.is_admin ? 'received' : 'sent'} ${activeReactionPicker === msg.id ? 'picker-active' : ''}`}
+                    onTouchStart={() => handleMessageTouchStart(msg.id)}
+                    onTouchEnd={handleMessageTouchEnd}
+                    onTouchMove={handleMessageTouchMove}
                   >
                     {/* Reply context */}
                     {msg.reply_to && (
@@ -772,6 +811,26 @@ export default function Home() {
                       </div>
                     )}
                     <div className="message-bubble">{msg.content}</div>
+                    
+                    {/* Hover action buttons (desktop) */}
+                    {currentUser && msg.id && (
+                      <div className={`message-actions ${msg.is_admin ? 'left' : 'right'}`}>
+                        <button 
+                          className="message-action-btn"
+                          onClick={() => showReactionPicker(msg.id)}
+                          title="React"
+                        >
+                          😊
+                        </button>
+                        <button 
+                          className="message-action-btn"
+                          onClick={() => handleReply(msg)}
+                          title="Reply"
+                        >
+                          ↩️
+                        </button>
+                      </div>
+                    )}
                     
                     {/* Reactions */}
                     {msg.reactions && msg.reactions.length > 0 && (
@@ -789,25 +848,27 @@ export default function Home() {
                       </div>
                     )}
                     
-                    {/* Reaction picker */}
+                    {/* Reaction picker (shown on mobile long-press or desktop click) */}
                     {activeReactionPicker === msg.id && currentUser && (
-                      <div className="reaction-picker">
-                        {REACTION_EMOJIS.map(emoji => (
+                      <div className="reaction-picker-overlay" onClick={hideReactionPicker}>
+                        <div className="reaction-picker" onClick={e => e.stopPropagation()}>
+                          {REACTION_EMOJIS.map(emoji => (
+                            <button
+                              key={emoji}
+                              className="reaction-picker-btn"
+                              onClick={() => handleReaction(msg.id, emoji)}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
                           <button
-                            key={emoji}
-                            className="reaction-picker-btn"
-                            onClick={() => handleReaction(msg.id, emoji)}
+                            className="reaction-picker-btn reply-btn"
+                            onClick={() => handleReply(msg)}
+                            title="Reply"
                           >
-                            {emoji}
+                            ↩️
                           </button>
-                        ))}
-                        <button
-                          className="reaction-picker-btn reply-btn"
-                          onClick={() => handleReply(msg)}
-                          title="Reply"
-                        >
-                          ↩️
-                        </button>
+                        </div>
                       </div>
                     )}
                     
