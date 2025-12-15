@@ -5,10 +5,10 @@ import { createUserSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/a
 
 export const runtime = 'nodejs'
 
-const USERNAME_MIN = 3
+const USERNAME_MIN = 2
 const USERNAME_MAX = 16
 const USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]*$/
-const RESERVED = ['admin', 'root', 'system', 'rory', 'rorchat', 'support', 'mod', 'staff', 'api', 'www']
+const RESERVED = ['admin', 'root', 'system', 'rory', 'rorchat', 'support', 'mod', 'staff', 'api', 'www', 'ror', 'r', 'ro', 'rordogs', 'the_real_rory', 'rorr']
 
 // Rate limiting for signups (more strict to prevent spam)
 const signupAttempts = new Map<string, { count: number; resetAt: number }>()
