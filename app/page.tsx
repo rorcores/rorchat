@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 
 // Message validation constants (mirrored from server)
 const MAX_MESSAGE_LENGTH = 500
-const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{Emoji}\p{Emoji_Component}\s\u00A0\u202F\.,!?¿¡;:'"''""´`ʻʼʽʹʺ′″‵‶()\[\]{}\-–—_@#$%&*+=\/\\|~^<>…•°€£¥¢₹₽₿©®™½¼¾×÷±≈]*$/u
+const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{M}\p{Z}\p{Emoji}\p{Emoji_Component}]*$/u
 
 function validateMessageContent(content: string): { valid: boolean; error?: string } {
   const trimmed = content.trim()

@@ -10,7 +10,7 @@ export const MAX_MESSAGE_LENGTH = 500 // Most chat apps use 500-1000 chars
 // - Common punctuation: . , ! ? ; : ' " - _ ( ) [ ] { } @ # $ % & * + = / \ | ~ ` ^ < >
 // - Whitespace (space, newline, tab)
 // - Emojis (via Unicode ranges)
-const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{Emoji}\p{Emoji_Component}\s\u00A0\u202F\.,!?¿¡;:'"''""´`ʻʼʽʹʺ′″‵‶()\[\]{}\-–—_@#$%&*+=\/\\|~^<>…•°€£¥¢₹₽₿©®™½¼¾×÷±≈]*$/u
+const ALLOWED_CHARS_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{M}\p{Z}\p{Emoji}\p{Emoji_Component}]*$/u
 
 export function validateMessageContent(content: string): { valid: boolean; error?: string } {
   // Check if it's only whitespace
