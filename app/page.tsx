@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-interface Profile {
+interface User {
   id: string
   username: string
   display_name: string
@@ -19,65 +19,52 @@ interface Message {
 export default function Home() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [userProfile, setUserProfile] = useState<Profile | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
   const [error, setError] = useState('')
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     if (url && key) {
-      const client = createClient(url, key)
-      setSupabase(client)
-      
-      client.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setCurrentUser(session.user)
-          loadProfile(client, session.user.id)
-        }
-      })
-
-      client.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          setCurrentUser(session.user)
-          loadProfile(client, session.user.id)
-        } else if (event === 'SIGNED_OUT') {
-          setCurrentUser(null)
-          setUserProfile(null)
-          setIsAuthenticated(false)
-        }
-      })
+      setSupabase(createClient(url, key))
     }
+
+    // Check if already logged in
+    checkAuth()
   }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const loadProfile = async (client: SupabaseClient, userId: string) => {
-    const { data } = await client
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    
-    if (data) {
-      setUserProfile(data)
-      setIsAuthenticated(true)
-      initializeChat(client, userId, data)
+  const checkAuth = async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const data = await res.json()
+      if (data.user) {
+        setCurrentUser(data.user)
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
-  const initializeChat = async (client: SupabaseClient, userId: string, profile: Profile) => {
+  useEffect(() => {
+    if (currentUser && supabase) {
+      initializeChat(supabase, currentUser)
+    }
+  }, [currentUser, supabase])
+
+  const initializeChat = async (client: SupabaseClient, user: User) => {
     // Get or create conversation
     const { data: existing } = await client
       .from('conversations')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .single()
 
     let convId: string
@@ -88,9 +75,9 @@ export default function Home() {
       const { data: newConv } = await client
         .from('conversations')
         .insert({ 
-          user_id: userId, 
-          visitor_name: profile.display_name || profile.username,
-          visitor_id: userId
+          user_id: user.id, 
+          visitor_name: user.display_name || user.username,
+          visitor_id: user.id
         })
         .select('id')
         .single()
@@ -130,73 +117,57 @@ export default function Home() {
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!supabase) return
+    setError('')
 
     const form = e.currentTarget
-    const username = (form.elements.namedItem('username') as HTMLInputElement).value.trim().toLowerCase()
-    const displayName = (form.elements.namedItem('displayName') as HTMLInputElement).value.trim()
+    const username = (form.elements.namedItem('username') as HTMLInputElement).value
     const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-    // Check if username is taken
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('username', username)
-      .single()
-
-    if (existing) {
-      setError('Username is already taken')
-      return
-    }
-
-    const fakeEmail = `${username}@users.rorchat.app`
-    
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: fakeEmail,
-      password,
-      options: { data: { username, display_name: displayName } }
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
     })
 
-    if (signUpError) {
-      setError(signUpError.message)
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error || 'Signup failed')
       return
     }
 
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        username,
-        display_name: displayName
-      })
-
-      // Auto sign in
-      await supabase.auth.signInWithPassword({ email: fakeEmail, password })
-    }
+    setCurrentUser(data.user)
   }
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!supabase) return
+    setError('')
 
     const form = e.currentTarget
-    const username = (form.elements.namedItem('username') as HTMLInputElement).value.trim().toLowerCase()
+    const username = (form.elements.namedItem('username') as HTMLInputElement).value
     const password = (form.elements.namedItem('password') as HTMLInputElement).value
-    const fakeEmail = `${username}@users.rorchat.app`
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: fakeEmail,
-      password
+    const res = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
     })
 
-    if (signInError) {
-      setError('Invalid username or password')
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error || 'Sign in failed')
+      return
     }
+
+    setCurrentUser(data.user)
   }
 
   const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut()
-    }
+    await fetch('/api/auth/signout', { method: 'POST' })
+    setCurrentUser(null)
+    setConversationId(null)
+    setMessages([])
   }
 
   const sendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -237,6 +208,18 @@ export default function Home() {
     })
   }
 
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="auth-view">
+          <div className="auth-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+            <p>Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Decorative Background */}
@@ -267,7 +250,7 @@ export default function Home() {
 
       <div className="app">
         {/* Auth View */}
-        <div className={`auth-view ${isAuthenticated ? 'hidden' : ''}`}>
+        <div className={`auth-view ${currentUser ? 'hidden' : ''}`}>
           <div className="auth-header">
             <a href="/" className="logo">
               <span className="logo-text">rorchat<span className="dot">.</span></span>
@@ -314,12 +297,8 @@ export default function Home() {
                 <form className="auth-form" onSubmit={handleSignUp}>
                   <div className="input-group">
                     <label>Username</label>
-                    <input type="text" name="username" placeholder="Pick a username" required autoComplete="username" autoCapitalize="none" pattern="[a-zA-Z0-9_]+" minLength={3} maxLength={20} />
-                    <span className="input-hint">Letters, numbers, underscores only</span>
-                  </div>
-                  <div className="input-group">
-                    <label>Display name</label>
-                    <input type="text" name="displayName" placeholder="How should Rory call you?" required />
+                    <input type="text" name="username" placeholder="Pick a username" required autoComplete="username" autoCapitalize="none" minLength={3} maxLength={16} />
+                    <span className="input-hint">3-16 chars, starts with a letter</span>
                   </div>
                   <div className="input-group">
                     <label>Password</label>
@@ -333,7 +312,7 @@ export default function Home() {
         </div>
 
         {/* Chat View */}
-        <div className={`chat-view ${isAuthenticated ? 'active' : ''}`}>
+        <div className={`chat-view ${currentUser ? 'active' : ''}`}>
           <header className="chat-header">
             <div className="chat-header-left">
               <div className="avatar">R</div>
@@ -347,7 +326,7 @@ export default function Home() {
             </div>
             <div className="header-actions">
               <div className="user-pill">
-                <span>{userProfile?.display_name || userProfile?.username || 'User'}</span>
+                <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
               </div>
               <button className="header-btn" onClick={handleSignOut} title="Sign out">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -401,4 +380,3 @@ export default function Home() {
     </>
   )
 }
-

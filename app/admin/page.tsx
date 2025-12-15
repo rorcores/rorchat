@@ -84,9 +84,9 @@ export default function Admin() {
     if (convs) {
       setConversations(convs)
       
-      const userIds = [...new Set(convs.map(c => c.user_id))]
+      const userIds = [...new Set(convs.map(c => c.user_id).filter(Boolean))]
       const { data: profs } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id, username, display_name')
         .in('id', userIds)
       
