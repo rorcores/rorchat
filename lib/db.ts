@@ -9,6 +9,14 @@ function normalizeConnectionString(raw: string): string {
   return trimmed.replace(/^["'](.*)["']$/, '$1')
 }
 
+function redactConnectionString(connectionString: string): string {
+  // Best-effort redaction: hide password if url is like protocol://user:pass@host/...
+  return connectionString.replace(
+    /^(postgres(?:ql)?:\/\/[^:/?#\s]+:)([^@]*)(@)/i,
+    '$1***$3'
+  )
+}
+
 function shouldUseSSL(connectionString: string): boolean {
   // Allow explicit disable via env or connection string.
   if ((process.env.PGSSLMODE || '').toLowerCase() === 'disable') return false
@@ -31,6 +39,16 @@ function getPool() {
     // eslint-disable-next-line no-new
     new URL(connectionString)
   } catch {
+    const redacted = redactConnectionString(connectionString)
+    console.error('[db] invalid DATABASE_URL', {
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV,
+      hasWhitespace: /\s/.test(connectionString),
+      hasAngleBrackets: /[<>]/.test(connectionString),
+      hasQuotes: /^["']|["']$/.test(connectionString),
+      length: connectionString.length,
+      preview: JSON.stringify(redacted)
+    })
     throw new Error(
       'DATABASE_URL is invalid. Ensure it is a full URL like postgresql://user:password@host:5432/db?sslmode=require. ' +
         'If your password contains special characters (like @ : / # ?), it must be URL-encoded. ' +
