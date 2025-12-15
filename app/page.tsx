@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, TouchEvent } from 'react'
 
 interface User {
   id: string
@@ -24,6 +24,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [testimonialIndex, setTestimonialIndex] = useState(0)
+  const touchStartX = useRef<number | null>(null)
 
   const testimonials = [
     {
@@ -48,9 +49,27 @@ export default function Home() {
     },
   ]
 
+  // Preview messages shown in the background when not logged in
+  const previewMessages: Message[] = [
+    { content: "Hey! 👋 Sign up to start chatting with me!", is_admin: true, created_at: new Date(Date.now() - 3600000).toISOString() },
+  ]
+
   useEffect(() => {
     // Check if already logged in
     checkAuth()
+  }, [])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const dropdown = document.querySelector('.user-dropdown.show')
+      const userMenu = document.querySelector('.user-menu')
+      if (dropdown && userMenu && !userMenu.contains(e.target as Node)) {
+        dropdown.classList.remove('show')
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
   useEffect(() => {
@@ -212,12 +231,55 @@ export default function Home() {
     })
   }
 
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return
+    
+    const touchEndX = e.changedTouches[0].clientX
+    const diff = touchStartX.current - touchEndX
+    const threshold = 50 // minimum swipe distance
+    
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) {
+        // Swiped left - go to next
+        setTestimonialIndex((prev) => (prev + 1) % testimonials.length)
+      } else {
+        // Swiped right - go to previous
+        setTestimonialIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length)
+      }
+    }
+    
+    touchStartX.current = null
+  }
+
+  // Messages to display - real ones when logged in, preview when not
+  const displayMessages = currentUser ? messages : previewMessages
+
   if (loading) {
     return (
       <div className="app">
-        <div className="auth-view">
-          <div className="auth-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-            <p>Loading...</p>
+        <div className="chat-view active">
+          <header className="chat-header">
+            <div className="chat-header-left">
+              <div className="avatar-img">
+                <img src="/profpic.png" alt="Rory" />
+              </div>
+              <div className="chat-header-info">
+                <h2>Rory</h2>
+                <div className="status">
+                  <span className="status-dot"></span>
+                  Online
+                </div>
+              </div>
+            </div>
+            <span className="header-logo">rorchat<span className="dot">.</span></span>
+            <div className="header-actions"></div>
+          </header>
+          <div className="messages-container">
+            <div className="loading-spinner"></div>
           </div>
         </div>
       </div>
@@ -225,46 +287,132 @@ export default function Home() {
   }
 
   return (
-    <>
-      {/* Decorative Background */}
-      <div className="bg-decoration">
-        <svg className="wave-top" viewBox="0 0 1440 120" fill="none" preserveAspectRatio="none">
-          <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,30 1440,60 L1440,0 L0,0 Z" fill="var(--primary)" opacity="0.03"/>
-          <path d="M0,40 C240,80 480,0 720,40 C960,80 1200,0 1440,40 L1440,0 L0,0 Z" fill="var(--primary)" opacity="0.02"/>
-        </svg>
-        <svg className="wave-bottom" viewBox="0 0 1440 100" fill="none" preserveAspectRatio="none">
-          <path d="M0,50 C360,100 720,0 1080,50 C1260,75 1380,25 1440,50 L1440,0 L0,0 Z" fill="var(--success)" opacity="0.03"/>
-        </svg>
-        <svg className="line-art line-art-1" viewBox="0 0 200 200" fill="none">
-          <circle cx="100" cy="100" r="80" stroke="var(--primary)" strokeWidth="1"/>
-          <circle cx="100" cy="100" r="60" stroke="var(--primary)" strokeWidth="0.5"/>
-          <circle cx="100" cy="100" r="40" stroke="var(--primary)" strokeWidth="0.5"/>
-          <path d="M20,100 Q100,20 180,100 Q100,180 20,100" stroke="var(--primary)" strokeWidth="0.5" fill="none"/>
-        </svg>
-        <svg className="line-art line-art-2" viewBox="0 0 200 200" fill="none">
-          <path d="M0,100 C50,50 150,150 200,100" stroke="var(--text)" strokeWidth="1" fill="none"/>
-          <path d="M0,120 C50,70 150,170 200,120" stroke="var(--text)" strokeWidth="0.5" fill="none"/>
-          <path d="M0,140 C50,90 150,190 200,140" stroke="var(--text)" strokeWidth="0.5" fill="none"/>
-          <circle cx="50" cy="100" r="30" stroke="var(--text)" strokeWidth="0.5" fill="none"/>
-          <circle cx="150" cy="100" r="25" stroke="var(--text)" strokeWidth="0.5" fill="none"/>
-        </svg>
-        <div className="gradient-orb orb-1"></div>
-        <div className="gradient-orb orb-2"></div>
+    <div className="app">
+      {/* Chat Interface - Always visible as background */}
+      <div className={`chat-view active ${!currentUser ? 'preview-mode' : ''}`}>
+        <header className="chat-header">
+          <div className="chat-header-left">
+            <div className="avatar-img">
+              <img src="/profpic.png" alt="Rory" />
+            </div>
+            <div className="chat-header-info">
+              <h2>Rory</h2>
+              <div className="status">
+                <span className="status-dot"></span>
+                Online
+              </div>
+            </div>
+          </div>
+          <span className="header-logo">rorchat<span className="dot">.</span></span>
+          
+          <div className="header-actions">
+            {currentUser && (
+              <div className="user-menu">
+                <button className="user-pill" onClick={(e) => {
+                  const menu = e.currentTarget.nextElementSibling;
+                  menu?.classList.toggle('show');
+                }}>
+                  <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
+                  <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+                <div className="user-dropdown">
+                  <button onClick={handleSignOut}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                    </svg>
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <div className="messages-container">
+          {displayMessages.length === 0 ? (
+            <div className="welcome-chat">
+              <div className="welcome-icon">💬</div>
+              <h3>Start a conversation</h3>
+              <p>Send a message and Rory will get back to you soon.</p>
+            </div>
+          ) : (
+            displayMessages.map((msg, i) => (
+              <div key={i} className={`message ${msg.is_admin ? 'received' : 'sent'}`}>
+                <div className="message-bubble">{msg.content}</div>
+                <div className="message-time">{formatTime(msg.created_at)}</div>
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        <form className="input-area" onSubmit={sendMessage}>
+          <div className="input-wrapper">
+            <textarea 
+              className="message-input" 
+              name="message"
+              placeholder="Message..."
+              rows={1}
+              disabled={!currentUser}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  e.currentTarget.form?.requestSubmit()
+                }
+              }}
+            />
+            <button type="submit" className="send-btn" disabled={!currentUser}>
+              <svg viewBox="0 0 24 24">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
+          </div>
+        </form>
       </div>
 
-      <div className="app">
-        {/* Auth View */}
-        <div className={`auth-view ${currentUser ? 'hidden' : ''}`}>
-          <div className="auth-header">
+      {/* Auth Modal Overlay */}
+      {!currentUser && (
+        <div className="auth-overlay">
+          {/* Subtle decorative background curves */}
+          <svg className="auth-decoration" viewBox="0 0 400 800" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path 
+              d="M-50 100 Q 100 150 50 300 T 100 500 T 0 700" 
+              stroke="rgba(99, 91, 255, 0.18)" 
+              strokeWidth="1.5" 
+              fill="none"
+            />
+            <path 
+              d="M450 50 Q 300 100 350 250 T 280 450 T 400 650" 
+              stroke="rgba(99, 91, 255, 0.15)" 
+              strokeWidth="1.5" 
+              fill="none"
+            />
+            <path 
+              d="M-30 200 Q 150 250 100 400 T 180 600" 
+              stroke="rgba(99, 91, 255, 0.12)" 
+              strokeWidth="1" 
+              fill="none"
+            />
+            <path 
+              d="M430 150 Q 280 200 320 350 T 250 550" 
+              stroke="rgba(99, 91, 255, 0.1)" 
+              strokeWidth="1" 
+              fill="none"
+            />
+            {/* Subtle circular accents */}
+            <circle cx="50" cy="150" r="80" stroke="rgba(99, 91, 255, 0.08)" strokeWidth="0.75" fill="none" />
+            <circle cx="350" cy="600" r="100" stroke="rgba(99, 91, 255, 0.07)" strokeWidth="0.75" fill="none" />
+          </svg>
+          <div className="auth-modal-card">
             <a href="/" className="logo">
               <span className="logo-text">rorchat<span className="dot">.</span></span>
             </a>
-          </div>
-
-          <div className="auth-content">
+            
             <div className="hero">
               <h1>Reach Rory, Today</h1>
-              <p>The easiest way to reach Rory. Simple, fast, straightforward.</p>
+              <p>The easiest way to reach Rory. Simple, fast.</p>
             </div>
 
             <div className="auth-card">
@@ -302,7 +450,6 @@ export default function Home() {
                   <div className="input-group">
                     <label>Username</label>
                     <input type="text" name="username" placeholder="Pick a username" required autoComplete="username" autoCapitalize="none" minLength={3} maxLength={16} />
-                    <span className="input-hint">3-16 chars, starts with a letter</span>
                   </div>
                   <div className="input-group">
                     <label>Password</label>
@@ -314,7 +461,11 @@ export default function Home() {
             </div>
 
             {/* Testimonials */}
-            <div className="testimonials">
+            <div 
+              className="testimonials"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
               <div className="testimonial" key={testimonialIndex}>
                 <p className="testimonial-quote">"{testimonials[testimonialIndex].quote}"</p>
                 <p className="testimonial-author">
@@ -330,79 +481,14 @@ export default function Home() {
                     key={i}
                     className={`testimonial-dot ${i === testimonialIndex ? 'active' : ''}`}
                     onClick={() => setTestimonialIndex(i)}
+                    aria-label={`Go to testimonial ${i + 1}`}
                   />
                 ))}
               </div>
             </div>
           </div>
         </div>
-
-        {/* Chat View */}
-        <div className={`chat-view ${currentUser ? 'active' : ''}`}>
-          <header className="chat-header">
-            <div className="chat-header-left">
-              <div className="avatar">R</div>
-              <div className="chat-header-info">
-                <h2>Rory</h2>
-                <div className="status">
-                  <span className="status-dot"></span>
-                  Online
-                </div>
-              </div>
-            </div>
-            <div className="header-actions">
-              <div className="user-pill">
-                <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
-              </div>
-              <button className="header-btn" onClick={handleSignOut} title="Sign out">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
-                </svg>
-              </button>
-            </div>
-          </header>
-
-          <div className="messages-container">
-            {messages.length === 0 ? (
-              <div className="welcome-chat">
-                <div className="welcome-icon">💬</div>
-                <h3>Start a conversation</h3>
-                <p>Send a message and Rory will get back to you soon.</p>
-              </div>
-            ) : (
-              messages.map((msg, i) => (
-                <div key={i} className={`message ${msg.is_admin ? 'received' : 'sent'}`}>
-                  <div className="message-bubble">{msg.content}</div>
-                  <div className="message-time">{formatTime(msg.created_at)}</div>
-                </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <form className="input-area" onSubmit={sendMessage}>
-            <div className="input-wrapper">
-              <textarea 
-                className="message-input" 
-                name="message"
-                placeholder="Message..."
-                rows={1}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    e.currentTarget.form?.requestSubmit()
-                  }
-                }}
-              />
-              <button type="submit" className="send-btn">
-                <svg viewBox="0 0 24 24">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                </svg>
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </>
+      )}
+    </div>
   )
 }
