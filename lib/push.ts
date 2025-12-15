@@ -80,7 +80,7 @@ async function sendToSubscription(
       },
       JSON.stringify(payload),
       {
-        TTL: 60 * 60, // 1 hour TTL
+        TTL: 60 * 5, // 5 minute TTL - signals time-sensitivity to iOS/APNs
         urgency: 'high'
       }
     )

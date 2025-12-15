@@ -980,7 +980,7 @@ export default function Home() {
                   <input type="password" name="password" placeholder="Enter password" minLength={6} required autoComplete="current-password" />
                 </div>
                 <button type="submit" className="auth-btn" disabled={authLoading}>
-                  {authLoading ? 'Loading...' : 'Continue'}
+                  {authLoading ? 'Loading...' : 'Sign Up/In'}
                 </button>
               </form>
             </div>

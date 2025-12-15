@@ -421,6 +421,65 @@ export default function Admin() {
     return conv.username || ''
   }
 
+  const shouldShowTimestamp = (messages: Message[], index: number): 'none' | 'inline' | 'header' => {
+    if (index === 0) return 'header'
+    
+    const currentMsg = messages[index]
+    const prevMsg = messages[index - 1]
+    
+    const currentTime = new Date(currentMsg.created_at).getTime()
+    const prevTime = new Date(prevMsg.created_at).getTime()
+    const diffMinutes = (currentTime - prevTime) / (1000 * 60)
+    
+    // If more than 15 minutes, show a header timestamp (centered, like iMessage)
+    if (diffMinutes > 15) return 'header'
+    
+    // If sender changed, show inline timestamp on last message of previous group
+    if (currentMsg.is_admin !== prevMsg.is_admin) return 'none'
+    
+    // Same sender, within 5 minutes - no timestamp needed
+    if (diffMinutes <= 5) return 'none'
+    
+    // Same sender but 5-15 minutes gap - show inline
+    return 'inline'
+  }
+
+  const shouldShowInlineTimestamp = (messages: Message[], index: number): boolean => {
+    // Show inline timestamp on the LAST message of a group
+    if (index === messages.length - 1) return true
+    
+    const currentMsg = messages[index]
+    const nextMsg = messages[index + 1]
+    
+    const currentTime = new Date(currentMsg.created_at).getTime()
+    const nextTime = new Date(nextMsg.created_at).getTime()
+    const diffMinutes = (nextTime - currentTime) / (1000 * 60)
+    
+    // Show timestamp if next message is from different sender
+    if (currentMsg.is_admin !== nextMsg.is_admin) return true
+    
+    // Show timestamp if there's a significant gap before next message
+    if (diffMinutes > 5) return true
+    
+    return false
+  }
+
+  const formatDateHeader = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 0) {
+      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } else if (diffDays === 1) {
+      return `Yesterday ${new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString([], { weekday: 'long' }) + ' ' + new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  }
+
   return (
     <>
       <div className="bg-decoration">
@@ -541,94 +600,107 @@ export default function Admin() {
               </header>
 
               <div className="messages-container">
-                {messages.map((msg, i) => (
-                  <div 
-                    key={msg.id || i} 
-                    className={`message ${msg.is_admin ? 'sent' : 'received'} ${activeReactionPicker === msg.id ? 'picker-active' : ''}`}
-                    onTouchStart={() => handleMessageTouchStart(msg.id)}
-                    onTouchEnd={handleMessageTouchEnd}
-                    onTouchMove={handleMessageTouchMove}
-                  >
-                    {/* Reply context */}
-                    {msg.reply_to && (
-                      <div className={`reply-context ${msg.reply_to.is_admin ? 'from-admin' : 'from-user'}`}>
-                        <div className="reply-context-label">
-                          {msg.reply_to.is_admin ? 'You' : getDisplayName(selectedConv)}
+                {messages.map((msg, i) => {
+                  const timestampType = shouldShowTimestamp(messages, i)
+                  const showInline = shouldShowInlineTimestamp(messages, i)
+                  
+                  return (
+                    <div key={msg.id || i} className={`message-group ${msg.is_admin ? 'sent' : 'received'}`}>
+                      {timestampType === 'header' && (
+                        <div className="message-time-header">
+                          {formatDateHeader(msg.created_at)}
                         </div>
-                        <div className="reply-context-content">
-                          {msg.reply_to.content.length > 50 
-                            ? msg.reply_to.content.slice(0, 50) + '...' 
-                            : msg.reply_to.content}
-                        </div>
-                      </div>
-                    )}
-                    <div className="message-bubble">{msg.content}</div>
-                    
-                    {/* Hover action buttons (desktop) */}
-                    {msg.id && (
-                      <div className={`message-actions ${msg.is_admin ? 'right' : 'left'}`}>
-                        <button 
-                          className="message-action-btn"
-                          onClick={() => showReactionPicker(msg.id)}
-                          title="React"
-                        >
-                          😊
-                        </button>
-                        <button 
-                          className="message-action-btn"
-                          onClick={() => handleReply(msg)}
-                          title="Reply"
-                        >
-                          ↩️
-                        </button>
-                      </div>
-                    )}
-                    
-                    {/* Reactions */}
-                    {msg.reactions && msg.reactions.length > 0 && (
-                      <div className="message-reactions">
-                        {msg.reactions.map(r => (
-                          <button
-                            key={r.emoji}
-                            className={`reaction-badge ${r.hasAdmin ? 'admin-reacted' : ''}`}
-                            onClick={() => handleReaction(msg.id, r.emoji)}
-                          >
-                            <span className="reaction-emoji">{r.emoji}</span>
-                            {r.count > 1 && <span className="reaction-count">{r.count}</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Reaction picker (shown on mobile long-press or desktop click) */}
-                    {activeReactionPicker === msg.id && (
-                      <div className="reaction-picker-overlay" onClick={hideReactionPicker}>
-                        <div className="reaction-picker" onClick={e => e.stopPropagation()}>
-                          {REACTION_EMOJIS.map(emoji => (
-                            <button
-                              key={emoji}
-                              className="reaction-picker-btn"
-                              onClick={() => handleReaction(msg.id, emoji)}
+                      )}
+                      <div 
+                        className={`message ${msg.is_admin ? 'sent' : 'received'} ${activeReactionPicker === msg.id ? 'picker-active' : ''}`}
+                        onTouchStart={() => handleMessageTouchStart(msg.id)}
+                        onTouchEnd={handleMessageTouchEnd}
+                        onTouchMove={handleMessageTouchMove}
+                      >
+                        {/* Reply context */}
+                        {msg.reply_to && (
+                          <div className={`reply-context ${msg.reply_to.is_admin ? 'from-admin' : 'from-user'}`}>
+                            <div className="reply-context-label">
+                              {msg.reply_to.is_admin ? 'You' : getDisplayName(selectedConv)}
+                            </div>
+                            <div className="reply-context-content">
+                              {msg.reply_to.content.length > 50 
+                                ? msg.reply_to.content.slice(0, 50) + '...' 
+                                : msg.reply_to.content}
+                            </div>
+                          </div>
+                        )}
+                        <div className="message-bubble">{msg.content}</div>
+                        
+                        {/* Hover action buttons (desktop) */}
+                        {msg.id && (
+                          <div className={`message-actions ${msg.is_admin ? 'right' : 'left'}`}>
+                            <button 
+                              className="message-action-btn"
+                              onClick={() => showReactionPicker(msg.id)}
+                              title="React"
                             >
-                              {emoji}
+                              😊
                             </button>
-                          ))}
-                          <button
-                            className="reaction-picker-btn reply-btn"
-                            onClick={() => handleReply(msg)}
-                            title="Reply"
-                          >
-                            ↩️
-                          </button>
-                        </div>
+                            <button 
+                              className="message-action-btn"
+                              onClick={() => handleReply(msg)}
+                              title="Reply"
+                            >
+                              ↩️
+                            </button>
+                          </div>
+                        )}
+                        
+                        {/* Reactions */}
+                        {msg.reactions && msg.reactions.length > 0 && (
+                          <div className="message-reactions">
+                            {msg.reactions.map(r => (
+                              <button
+                                key={r.emoji}
+                                className={`reaction-badge ${r.hasAdmin ? 'admin-reacted' : ''}`}
+                                onClick={() => handleReaction(msg.id, r.emoji)}
+                              >
+                                <span className="reaction-emoji">{r.emoji}</span>
+                                {r.count > 1 && <span className="reaction-count">{r.count}</span>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Reaction picker (shown on mobile long-press or desktop click) */}
+                        {activeReactionPicker === msg.id && (
+                          <div className="reaction-picker-overlay" onClick={hideReactionPicker}>
+                            <div className="reaction-picker" onClick={e => e.stopPropagation()}>
+                              {REACTION_EMOJIS.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  className="reaction-picker-btn"
+                                  onClick={() => handleReaction(msg.id, emoji)}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                              <button
+                                className="reaction-picker-btn reply-btn"
+                                onClick={() => handleReply(msg)}
+                                title="Reply"
+                              >
+                                ↩️
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {showInline && (
+                          <div className="message-time">
+                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    
-                    <div className="message-time">
-                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {isUserTyping && (
                   <div className="typing-indicator">
                     <div className="typing-dots">
