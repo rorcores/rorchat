@@ -588,6 +588,23 @@ body {
   position: relative;
 }
 
+/* Subtle ambient gradient glow for premium feel */
+.chat-view::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: 
+    radial-gradient(ellipse 100% 50% at 50% 0%, rgba(99, 91, 255, 0.015) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 40% at 100% 100%, rgba(99, 91, 255, 0.02) 0%, transparent 40%);
+  z-index: 0;
+}
+
+.chat-view > * {
+  position: relative;
+  z-index: 1;
+}
+
 .chat-view.active {
   display: flex;
 }
@@ -603,6 +620,26 @@ body {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Subtle shimmer line at bottom of header */
+.chat-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 91, 255, 0.08) 20%,
+    rgba(99, 91, 255, 0.15) 50%,
+    rgba(99, 91, 255, 0.08) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
 @media (min-width: 768px) {
@@ -637,7 +674,20 @@ body {
   overflow: hidden;
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(99, 91, 255, 0.25);
+  box-shadow: 
+    0 2px 8px rgba(99, 91, 255, 0.25),
+    0 0 0 2px rgba(99, 91, 255, 0.08);
+  position: relative;
+}
+
+/* Subtle ring effect around avatar */
+.avatar-img::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid rgba(99, 91, 255, 0.1);
+  pointer-events: none;
 }
 
 .avatar-img img {
@@ -673,12 +723,25 @@ body {
 .status-dot {
   width: 7px;
   height: 7px;
-  background: var(--primary);
+  background: var(--text-muted);
   border-radius: 50%;
+  position: relative;
 }
 
 .status-dot.online {
   background: var(--success);
+  /* Subtle glow effect instead of expanding pulse */
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.5);
+  animation: statusGlow 2s ease-in-out infinite;
+}
+
+@keyframes statusGlow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  }
 }
 
 .header-actions {
@@ -698,7 +761,7 @@ body {
   gap: 4px;
   padding: 6px 10px 6px 12px;
   background: var(--primary-light);
-  border: none;
+  border: 1px solid rgba(99, 91, 255, 0.1);
   border-radius: 100px;
   font-family: inherit;
   font-size: 12px;
@@ -706,10 +769,12 @@ body {
   color: var(--primary);
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(99, 91, 255, 0.05);
 }
 
 .user-pill:hover {
   background: #ddd6fe;
+  box-shadow: 0 2px 6px rgba(99, 91, 255, 0.12);
 }
 
 .user-pill .chevron {
@@ -733,7 +798,7 @@ body {
   visibility: hidden;
   transform: translateY(-4px);
   transition: all 0.15s ease;
-  z-index: 50;
+  z-index: 200;
 }
 
 .user-dropdown.show {
@@ -799,11 +864,26 @@ body {
   letter-spacing: -0.04em;
   color: var(--text-muted);
   text-align: center;
+  position: relative;
+}
+
+/* Subtle underline accent for logo */
+.header-logo::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(99, 91, 255, 0.15), transparent);
+  border-radius: 1px;
 }
 
 .header-logo .dot {
-  color: #9ca3af;
+  color: var(--primary);
   font-weight: 800;
+  opacity: 0.6;
 }
 
 /* Messages */
@@ -818,6 +898,20 @@ body {
   gap: 8px;
   min-width: 0; /* Allow flex shrinking */
   width: 100%; /* Explicit width to prevent content-based sizing */
+  position: relative;
+}
+
+/* Subtle background decorations for chat - very light flowing lines */
+.messages-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 800' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='chatGrad1' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23635bff' stop-opacity='0.03'/%3E%3Cstop offset='100%25' stop-color='%23635bff' stop-opacity='0.01'/%3E%3C/linearGradient%3E%3C/defs%3E%3C!-- Very subtle top corner curve --%3E%3Cpath d='M 380 20 Q 350 60 380 100' stroke='%23635bff' stroke-width='0.5' fill='none' opacity='0.08'/%3E%3Cpath d='M 390 40 Q 360 80 390 120' stroke='%23635bff' stroke-width='0.5' fill='none' opacity='0.05'/%3E%3C!-- Delicate bottom flowing wave --%3E%3Cpath d='M -20 720 Q 80 700 180 720 T 380 700 T 520 730' stroke='url(%23chatGrad1)' stroke-width='30' fill='none' opacity='0.6'/%3E%3Cpath d='M -20 760 Q 100 740 200 760 T 400 740 T 520 770' stroke='%23635bff' stroke-width='15' fill='none' opacity='0.025'/%3E%3C!-- Subtle corner accent --%3E%3Ccircle cx='30' cy='750' r='40' stroke='%23635bff' stroke-width='0.5' fill='none' opacity='0.04'/%3E%3C!-- Light vertical flow line --%3E%3Cpath d='M 20 50 Q 30 200 20 400 Q 10 550 25 700' stroke='%23635bff' stroke-width='0.5' fill='none' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center;
+  background-attachment: local;
 }
 
 .welcome-chat {
@@ -952,9 +1046,12 @@ body {
 }
 
 .message.sent .message-bubble {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
   color: white;
   border-bottom-right-radius: 6px;
+  box-shadow: 
+    0 1px 2px rgba(99, 91, 255, 0.15),
+    0 2px 8px rgba(99, 91, 255, 0.1);
 }
 
 .message.received .message-bubble {
@@ -962,6 +1059,7 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
   border-bottom-left-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .message-time {
@@ -979,10 +1077,22 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
-  padding: 8px 0 12px;
+  padding: 12px 0 16px;
   font-weight: 500;
   align-self: center;
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Subtle decorative lines around timestamp */
+.message-time-header::before,
+.message-time-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 91, 255, 0.08), transparent);
 }
 
 /* Input Area */
@@ -992,6 +1102,39 @@ body {
   background: var(--surface);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle shimmer line at top of input area */
+.input-area::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 91, 255, 0.06) 25%,
+    rgba(99, 91, 255, 0.1) 50%,
+    rgba(99, 91, 255, 0.06) 75%,
+    transparent 100%
+  );
+}
+
+/* Very subtle decorative curve in input area corner */
+.input-area::after {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  left: -20px;
+  width: 60px;
+  height: 60px;
+  border: 1px solid rgba(99, 91, 255, 0.03);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 @media (min-width: 768px) {
@@ -1010,7 +1153,7 @@ body {
   flex: 1;
   padding: 14px 18px;
   background: var(--bg);
-  border: none;
+  border: 2px solid transparent;
   border-radius: 24px;
   color: var(--text);
   font-family: inherit;
@@ -1020,10 +1163,17 @@ body {
   max-height: 100px;
   min-height: 48px;
   line-height: 1.4;
+  transition: all 0.2s ease;
 }
 
 .message-input::placeholder {
   color: var(--text-muted);
+}
+
+.message-input:focus {
+  border-color: rgba(99, 91, 255, 0.15);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.05);
 }
 
 .message-input:disabled {
@@ -1039,7 +1189,7 @@ body {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
   border: none;
   cursor: pointer;
   display: flex;
@@ -1047,6 +1197,31 @@ body {
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  box-shadow: 
+    0 2px 8px rgba(99, 91, 255, 0.25),
+    0 0 0 1px rgba(99, 91, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle inner shine */
+.send-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: 50% 50% 0 0;
+}
+
+.send-btn:hover:not(:disabled) {
+  box-shadow: 
+    0 4px 12px rgba(99, 91, 255, 0.35),
+    0 0 0 1px rgba(99, 91, 255, 0.15);
+  transform: translateY(-1px);
 }
 
 .send-btn:active {
@@ -1282,7 +1457,7 @@ body {
 /* Desktop: constrain admin width and center */
 @media (min-width: 769px) {
   .admin-app {
-    max-width: 1100px;
+    max-width: 1000px;
     width: 100%;
     left: 50%;
     transform: translateX(-50%);
@@ -1529,6 +1704,15 @@ body {
   align-items: flex-end;
   flex-shrink: 0;
   min-width: 0; /* Allow proper sizing within flex container */
+}
+
+/* Admin reply area - full width input */
+.admin-app .reply-area {
+  padding: 16px;
+}
+
+.admin-app .reply-input {
+  min-height: 48px;
 }
 
 .reply-input {
