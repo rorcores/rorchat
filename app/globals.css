@@ -23,6 +23,7 @@
 
 html, body {
   height: 100%;
+  height: 100dvh; /* Dynamic viewport height for mobile keyboard handling */
   overflow: hidden;
 }
 
@@ -64,8 +65,10 @@ body {
   position: relative;
   z-index: 1;
   height: 100%;
+  height: 100dvh; /* Dynamic viewport height for mobile keyboard */
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Desktop: phone mockup container */
@@ -618,9 +621,11 @@ body {
 .chat-view {
   display: flex;
   height: 100%;
+  height: 100dvh; /* Dynamic viewport height for mobile keyboard */
   flex-direction: column;
   background: var(--bg);
   position: relative;
+  overflow: hidden;
 }
 
 /* Subtle ambient gradient glow for premium feel */
@@ -655,8 +660,10 @@ body {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  flex-grow: 0;
   position: relative;
   z-index: 50;
+  min-height: fit-content;
 }
 
 /* Subtle shimmer line at bottom of header */
@@ -980,15 +987,17 @@ body {
 
 /* Messages */
 .messages-container {
-  flex: 1;
+  flex: 1 1 0%;
   overflow-y: auto;
   overflow-x: hidden; /* Prevent horizontal overflow from affecting layout */
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0; /* Allow flex shrinking */
+  min-height: 0; /* Critical for flex child to shrink properly */
   width: 100%; /* Explicit width to prevent content-based sizing */
   position: relative;
 }
@@ -1194,8 +1203,10 @@ body {
   background: var(--surface);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  flex-grow: 0;
   position: relative;
   overflow: hidden;
+  min-height: fit-content;
 }
 
 /* Subtle shimmer line at top of input area */
@@ -1613,7 +1624,11 @@ body {
 /* Admin Layout */
 .admin-app {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100dvh; /* Dynamic viewport height for mobile keyboard */
   z-index: 1;
   display: flex;
   flex-direction: row;
@@ -1697,16 +1712,21 @@ body {
 @media (max-width: 768px) {
   .admin-app {
     flex-direction: column;
+    height: 100dvh;
   }
 
   .admin-app .sidebar {
     width: 100%;
     height: 100%;
+    height: 100dvh;
     max-width: none;
     min-width: 0;
     border-right: none;
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 10;
     transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
   }
@@ -1714,10 +1734,16 @@ body {
   .admin-app .chat-area {
     width: 100%;
     height: 100%;
+    height: 100dvh;
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 5;
     transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    display: flex;
+    flex-direction: column;
   }
 
   /* Mobile list view - show sidebar, hide chat */
@@ -2092,11 +2118,11 @@ body {
 }
 
 .chat-area {
-  flex: 1;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  min-height: 0;
+  min-height: 0; /* Critical for flex child to shrink properly */
   min-width: 0; /* Prevent flex item from expanding based on content */
   max-width: 100%; /* Never exceed available width */
   overflow: hidden; /* Ensure content doesn't cause layout shifts */
@@ -2221,11 +2247,14 @@ body {
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 0;
   flex-shrink: 0;
+  flex-grow: 0;
   min-width: 0; /* Allow proper sizing within flex container */
+  min-height: fit-content;
   position: relative;
+  width: 100%;
 }
 
 /* Shimmer line at top of reply area */
@@ -2325,7 +2354,9 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, var(--surface) 100%);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  flex-grow: 0;
   min-width: 0; /* Allow proper sizing within flex container */
+  min-height: fit-content;
   position: relative;
 }
 
@@ -2803,12 +2834,6 @@ body {
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  width: 100%;
-}
-
-.reply-area {
-  display: flex;
-  flex-direction: column;
   width: 100%;
 }
 
