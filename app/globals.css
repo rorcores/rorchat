@@ -634,6 +634,7 @@ body {
   gap: 12px;
   flex-shrink: 0;
   position: relative;
+  z-index: 50;
 }
 
 /* Subtle shimmer line at bottom of header */
@@ -780,6 +781,7 @@ body {
 
 .user-menu {
   position: relative;
+  z-index: 210;
 }
 
 .user-pill {
@@ -849,6 +851,7 @@ body {
   color: var(--text);
   cursor: pointer;
   transition: background 0.15s ease;
+  pointer-events: auto;
 }
 
 .user-dropdown button:hover {
