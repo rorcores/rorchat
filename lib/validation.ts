@@ -37,7 +37,7 @@ export function validateMessageContent(content: string): { valid: boolean; error
 const userMessageTimestamps: Map<string, number[]> = new Map()
 
 export const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
-export const RATE_LIMIT_MAX_MESSAGES = 20 // 20 messages per minute
+export const RATE_LIMIT_MAX_MESSAGES = 15 // 15 messages per minute
 
 export function checkRateLimit(userId: string): { allowed: boolean; retryAfterMs?: number } {
   const now = Date.now()

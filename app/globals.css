@@ -1042,6 +1042,31 @@ body {
   margin-bottom: 8px;
 }
 
+.message-error.rate-limited {
+  background: linear-gradient(135deg, #fef3c7 0%, #fef2f2 100%);
+  border-color: #fcd34d;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.message-error.rate-limited strong {
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  display: inline-block;
+}
+
+.rate-limit-icon {
+  font-size: 16px;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
 .char-count {
   font-size: 11px;
   color: var(--text-muted);

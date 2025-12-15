@@ -44,6 +44,7 @@ export default function Home() {
   const [isAdminTyping, setIsAdminTyping] = useState(false)
   const [messageInput, setMessageInput] = useState('')
   const [messageError, setMessageError] = useState('')
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -133,6 +134,23 @@ export default function Home() {
     }, 5000)
     return () => clearInterval(interval)
   }, [testimonials.length])
+
+  // Rate limit countdown timer
+  useEffect(() => {
+    if (rateLimitCountdown <= 0) return
+    
+    const timer = setInterval(() => {
+      setRateLimitCountdown(prev => {
+        if (prev <= 1) {
+          setMessageError('')
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
+    return () => clearInterval(timer)
+  }, [rateLimitCountdown])
 
   const checkAuth = async () => {
     try {
@@ -341,6 +359,9 @@ export default function Home() {
   const sendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!conversationId) return
+    
+    // Don't allow sending if rate limited
+    if (rateLimitCountdown > 0) return
 
     const content = messageInput.trim()
     
@@ -375,7 +396,16 @@ export default function Home() {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      setMessageError(data.error || 'Failed to send message')
+      
+      // Handle rate limiting with countdown
+      if (res.status === 429) {
+        const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10)
+        setRateLimitCountdown(retryAfter)
+        setMessageError(`Too many messages. Please wait...`)
+      } else {
+        setMessageError(data.error || 'Failed to send message')
+      }
+      
       // fallback: refresh from server
       const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
       if (refresh.ok) {
@@ -609,20 +639,27 @@ export default function Home() {
 
         <form className="input-area" onSubmit={sendMessage}>
           {messageError && (
-            <div className="message-error">{messageError}</div>
+            <div className={`message-error ${rateLimitCountdown > 0 ? 'rate-limited' : ''}`}>
+              {rateLimitCountdown > 0 ? (
+                <>
+                  <span className="rate-limit-icon">⏱️</span>
+                  <span>Too many messages. Try again in <strong>{rateLimitCountdown}s</strong></span>
+                </>
+              ) : messageError}
+            </div>
           )}
           <div className="input-wrapper">
             <textarea 
               className="message-input" 
               name="message"
-              placeholder="Message..."
+              placeholder={rateLimitCountdown > 0 ? `Wait ${rateLimitCountdown}s...` : "Message..."}
               rows={1}
-              disabled={!currentUser}
+              disabled={!currentUser || rateLimitCountdown > 0}
               value={messageInput}
               maxLength={MAX_MESSAGE_LENGTH}
               onChange={(e) => {
                 setMessageInput(e.target.value)
-                setMessageError('')
+                if (rateLimitCountdown === 0) setMessageError('')
                 handleTyping()
               }}
               onKeyDown={(e) => {
@@ -632,7 +669,7 @@ export default function Home() {
                 }
               }}
             />
-            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim()}>
+            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0}>
               <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
               </svg>
