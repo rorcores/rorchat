@@ -397,7 +397,12 @@ export default function Home() {
     }
   }
 
-  const handleSignOut = async () => {
+  const handleSignOut = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Close the dropdown immediately
+    const dropdown = document.querySelector('.user-dropdown.show')
+    dropdown?.classList.remove('show')
+    
     await fetch('/api/auth/signout', { method: 'POST' })
     setCurrentUser(null)
     setConversationId(null)
@@ -738,7 +743,7 @@ export default function Home() {
                   </svg>
                 </button>
                 <div className="user-dropdown">
-                  <button onClick={handleSignOut}>
+                  <button onClick={(e) => handleSignOut(e)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
                     </svg>
