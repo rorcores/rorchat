@@ -39,6 +39,9 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx || !image) return
 
+    const centerX = canvas.width / 2
+    const centerY = canvas.height / 2
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -53,29 +56,27 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     // Draw image
     ctx.drawImage(image, x, y, scaledWidth, scaledHeight)
 
-    // Save the current state
-    ctx.save()
-    
-    // Create a path for the area OUTSIDE the circle
+    // Draw dark overlay OUTSIDE the circle using evenodd fill rule
     ctx.beginPath()
-    // Outer rectangle (full canvas)
-    ctx.rect(0, 0, canvas.width, canvas.height)
-    // Inner circle (counter-clockwise to cut it out)
-    ctx.arc(canvas.width / 2, canvas.height / 2, CROP_SIZE / 2, 0, Math.PI * 2, true)
+    // Outer rectangle (clockwise)
+    ctx.moveTo(0, 0)
+    ctx.lineTo(canvas.width, 0)
+    ctx.lineTo(canvas.width, canvas.height)
+    ctx.lineTo(0, canvas.height)
+    ctx.closePath()
+    // Inner circle (counter-clockwise for evenodd)
+    ctx.moveTo(centerX + CROP_SIZE / 2, centerY)
+    ctx.arc(centerX, centerY, CROP_SIZE / 2, 0, Math.PI * 2, true)
     ctx.closePath()
     
-    // Fill the outside area with dark overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-    ctx.fill()
-    
-    // Restore state
-    ctx.restore()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    ctx.fill('evenodd')
     
     // Draw circle border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(canvas.width / 2, canvas.height / 2, CROP_SIZE / 2, 0, Math.PI * 2)
+    ctx.arc(centerX, centerY, CROP_SIZE / 2, 0, Math.PI * 2)
     ctx.stroke()
   }, [image, scale, position])
 

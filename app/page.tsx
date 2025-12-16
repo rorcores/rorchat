@@ -1317,16 +1317,43 @@ export default function Home() {
             <div className="auth-card">
               {error && <div className="auth-error show">{error}</div>}
 
-              <form className="auth-form" onSubmit={handleAuth}>
+              <form 
+                className="auth-form" 
+                onSubmit={handleAuth}
+                action="#"
+                method="POST"
+              >
                 <div className="input-group">
-                  <label>Username</label>
-                  <input type="text" name="username" placeholder="Enter username" required autoComplete="username" autoCapitalize="none" minLength={2} maxLength={16} />
+                  <label htmlFor="auth-username">Username</label>
+                  <input 
+                    id="auth-username"
+                    type="text" 
+                    name="username" 
+                    placeholder="Enter username" 
+                    required 
+                    autoComplete="username" 
+                    autoCapitalize="none" 
+                    minLength={2} 
+                    maxLength={16} 
+                  />
                 </div>
                 <div className="input-group">
-                  <label>Password</label>
-                  <input type="password" name="password" placeholder="Enter password" minLength={6} required autoComplete="current-password" />
+                  <label htmlFor="auth-password">Password</label>
+                  <input 
+                    id="auth-password"
+                    type="password" 
+                    name="password" 
+                    placeholder="Enter password" 
+                    minLength={6} 
+                    required 
+                    autoComplete="current-password" 
+                  />
                 </div>
-                <button type="submit" className="auth-btn" disabled={authLoading}>
+                <button 
+                  type="submit" 
+                  className="auth-btn" 
+                  disabled={authLoading}
+                >
                   {authLoading ? 'Loading...' : 'Sign Up/In'}
                 </button>
               </form>

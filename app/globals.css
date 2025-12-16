@@ -105,6 +105,9 @@ body {
   padding: 20px;
   overflow-y: auto;
   animation: overlayIn 0.4s ease-out;
+  /* Ensure touch events work on mobile */
+  pointer-events: auto;
+  touch-action: auto;
 }
 
 /* Desktop: constrain auth overlay to phone mockup */
@@ -157,6 +160,9 @@ body {
   animation: modalIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
+  /* Ensure touch events work on mobile */
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 /* Subtle shimmer effect at top of card */
@@ -418,6 +424,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  pointer-events: auto;
+  touch-action: manipulation;
+  width: 100%;
 }
 
 .auth-form.hidden {
@@ -495,6 +504,10 @@ body {
     0 4px 12px rgba(99, 91, 255, 0.15);
   position: relative;
   overflow: hidden;
+  /* Ensure touch events work on mobile */
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .auth-btn::before {
