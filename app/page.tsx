@@ -26,6 +26,7 @@ interface User {
   id: string
   username: string
   display_name: string
+  profile_picture_url?: string | null
 }
 
 interface Reaction {
@@ -48,9 +49,22 @@ interface Message {
   created_at: string
   reactions?: Reaction[]
   reply_to?: ReplyTo | null
+  image_url?: string | null
+  image_width?: number
+  image_height?: number
 }
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢']
+
+// Import image utilities dynamically to avoid SSR issues
+async function processImageFile(file: File, type: 'profile' | 'chat') {
+  const { processImage, validateImageFile } = await import('@/lib/imageUtils')
+  const validation = validateImageFile(file)
+  if (!validation.valid) {
+    throw new Error(validation.error)
+  }
+  return processImage(file, type)
+}
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -77,6 +91,21 @@ export default function Home() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false)
+  const [settingsUsername, setSettingsUsername] = useState('')
+  const [settingsDisplayName, setSettingsDisplayName] = useState('')
+  const [settingsProfilePic, setSettingsProfilePic] = useState<string | null>(null)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
+  const [settingsSuccess, setSettingsSuccess] = useState('')
+  const profilePicInputRef = useRef<HTMLInputElement>(null)
+  
+  // Image upload state for chat
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   
   // Handle mobile keyboard
   useKeyboardHeight()
@@ -543,6 +572,182 @@ export default function Home() {
     setReplyingTo(null)
   }
 
+  // Settings modal functions
+  const openSettings = () => {
+    if (currentUser) {
+      setSettingsUsername(currentUser.username || '')
+      setSettingsDisplayName(currentUser.display_name || '')
+      setSettingsProfilePic(currentUser.profile_picture_url || null)
+      setSettingsError('')
+      setSettingsSuccess('')
+      setShowSettings(true)
+    }
+  }
+
+  const closeSettings = () => {
+    setShowSettings(false)
+    setSettingsError('')
+    setSettingsSuccess('')
+  }
+
+  const handleProfilePicChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setSettingsError('')
+      const processed = await processImageFile(file, 'profile')
+      setSettingsProfilePic(processed.dataUrl)
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Failed to process image')
+    }
+    
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }
+
+  const saveSettings = async () => {
+    if (!currentUser) return
+    
+    setSettingsSaving(true)
+    setSettingsError('')
+    setSettingsSuccess('')
+
+    try {
+      const updates: Record<string, string | null> = {}
+      
+      if (settingsUsername !== currentUser.username) {
+        updates.username = settingsUsername
+      }
+      if (settingsDisplayName !== (currentUser.display_name || '')) {
+        updates.display_name = settingsDisplayName
+      }
+      if (settingsProfilePic !== (currentUser.profile_picture_url || null)) {
+        updates.profile_picture = settingsProfilePic
+      }
+
+      if (Object.keys(updates).length === 0) {
+        setSettingsSuccess('No changes to save')
+        setSettingsSaving(false)
+        return
+      }
+
+      const res = await fetch('/api/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setSettingsError(data.error || 'Failed to save settings')
+        return
+      }
+
+      // Update local user state
+      setCurrentUser(data.user)
+      setSettingsSuccess('Settings saved!')
+      
+      // Close modal after short delay
+      setTimeout(() => closeSettings(), 1500)
+    } catch {
+      setSettingsError('Failed to save settings')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  // Image upload for chat
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setMessageError('')
+      const processed = await processImageFile(file, 'chat')
+      setImagePreview({
+        dataUrl: processed.dataUrl,
+        width: processed.width,
+        height: processed.height
+      })
+    } catch (err) {
+      setMessageError(err instanceof Error ? err.message : 'Failed to process image')
+    }
+    
+    e.target.value = ''
+  }
+
+  const cancelImageUpload = () => {
+    setImagePreview(null)
+  }
+
+  const sendImageMessage = async () => {
+    if (!conversationId || !imagePreview || uploadingImage) return
+    if (rateLimitCountdown > 0) return
+
+    setUploadingImage(true)
+    setMessageError('')
+
+    // Mark optimistic update
+    lastOptimisticUpdateRef.current = Date.now()
+
+    // Optimistic update
+    const tempMessage: Message = {
+      content: '📷 Image',
+      is_admin: false,
+      created_at: new Date().toISOString(),
+      image_url: imagePreview.dataUrl,
+      image_width: imagePreview.width,
+      image_height: imagePreview.height,
+      reply_to: replyingTo ? {
+        id: replyingTo.id!,
+        content: replyingTo.content,
+        is_admin: replyingTo.is_admin
+      } : null
+    }
+    setMessages(prev => [...prev, tempMessage])
+    
+    const replyToId = replyingTo?.id
+    setImagePreview(null)
+    setReplyingTo(null)
+
+    try {
+      const res = await fetch('/api/chat/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          imageData: tempMessage.image_url,
+          width: tempMessage.image_width,
+          height: tempMessage.image_height,
+          replyToId
+        })
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        
+        if (res.status === 429) {
+          const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10)
+          setRateLimitCountdown(retryAfter)
+          setMessageError('Too many messages. Please wait...')
+        } else {
+          setMessageError(data.error || 'Failed to send image')
+        }
+        
+        // Refresh from server on error
+        const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
+        if (refresh.ok) {
+          const refreshData = await refresh.json()
+          setMessages(refreshData.messages || [])
+        }
+      }
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   const showReactionPicker = (messageId: string | undefined) => {
     if (!messageId) return
     
@@ -743,6 +948,13 @@ export default function Home() {
                     </svg>
                   </button>
                   <div className="user-dropdown">
+                    <button onClick={(e) => { e.stopPropagation(); openSettings(); document.querySelector('.user-dropdown')?.classList.remove('show'); }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                      </svg>
+                      Settings
+                    </button>
                     <button onClick={(e) => handleSignOut(e)}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
@@ -810,7 +1022,23 @@ export default function Home() {
                         </div>
                       </div>
                     )}
-                    <div className="message-bubble">{msg.content}</div>
+                        {msg.image_url ? (
+                          <div className="message-image">
+                            <img 
+                              src={msg.image_url} 
+                              alt="Shared image"
+                              style={{
+                                maxWidth: '100%',
+                                maxHeight: '300px',
+                                borderRadius: '12px',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => window.open(msg.image_url!, '_blank')}
+                            />
+                          </div>
+                        ) : (
+                          <div className="message-bubble">{msg.content}</div>
+                        )}
                     
                     {/* Hover action buttons (desktop) */}
                     {currentUser && msg.id && (
@@ -893,8 +1121,39 @@ export default function Home() {
         </div>
 
         <form className="input-area" onSubmit={sendMessage}>
+          {/* Hidden file input for images */}
+          <input
+            type="file"
+            ref={imageInputRef}
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            style={{ display: 'none' }}
+            onChange={handleImageSelect}
+          />
+          
+          {/* Image preview */}
+          {imagePreview && (
+            <div className="image-preview">
+              <img src={imagePreview.dataUrl} alt="Preview" />
+              <div className="image-preview-actions">
+                <button type="button" className="image-preview-cancel" onClick={cancelImageUpload}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+                <button 
+                  type="button" 
+                  className="image-preview-send" 
+                  onClick={sendImageMessage}
+                  disabled={uploadingImage || rateLimitCountdown > 0}
+                >
+                  {uploadingImage ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* Reply preview */}
-          {replyingTo && (
+          {replyingTo && !imagePreview && (
             <div className="reply-preview">
               <div className="reply-preview-content">
                 <span className="reply-preview-label">
@@ -924,12 +1183,27 @@ export default function Home() {
             </div>
           )}
           <div className="input-wrapper">
+            {!imagePreview && (
+              <button 
+                type="button" 
+                className="image-picker-btn"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={!currentUser || rateLimitCountdown > 0}
+                title="Send image"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <path d="M21 15l-5-5L5 21"/>
+                </svg>
+              </button>
+            )}
             <textarea 
               className="message-input" 
               name="message"
               placeholder={rateLimitCountdown > 0 ? `Wait ${rateLimitCountdown}s...` : "Message..."}
               rows={1}
-              disabled={!currentUser || rateLimitCountdown > 0}
+              disabled={!currentUser || rateLimitCountdown > 0 || !!imagePreview}
               value={messageInput}
               maxLength={MAX_MESSAGE_LENGTH}
               enterKeyHint="send"
@@ -946,7 +1220,7 @@ export default function Home() {
                 }
               }}
             />
-            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0}>
+            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0 || !!imagePreview}>
               <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
               </svg>
@@ -1002,6 +1276,112 @@ export default function Home() {
                   )}
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && currentUser && (
+        <div className="settings-overlay" onClick={closeSettings}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <div className="settings-header">
+              <h2>Settings</h2>
+              <button className="settings-close" onClick={closeSettings}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="settings-content">
+              {/* Profile Picture */}
+              <div className="settings-section">
+                <label className="settings-label">Profile Picture</label>
+                <div className="profile-pic-editor">
+                  <div className="profile-pic-preview">
+                    {settingsProfilePic ? (
+                      <img src={settingsProfilePic} alt="Profile" />
+                    ) : (
+                      <div className="profile-pic-placeholder">
+                        {(settingsDisplayName || settingsUsername || 'U').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="profile-pic-actions">
+                    <input
+                      type="file"
+                      ref={profilePicInputRef}
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      style={{ display: 'none' }}
+                      onChange={handleProfilePicChange}
+                    />
+                    <button 
+                      type="button" 
+                      className="profile-pic-btn"
+                      onClick={() => profilePicInputRef.current?.click()}
+                    >
+                      Change Photo
+                    </button>
+                    {settingsProfilePic && (
+                      <button 
+                        type="button" 
+                        className="profile-pic-btn remove"
+                        onClick={() => setSettingsProfilePic(null)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Username */}
+              <div className="settings-section">
+                <label className="settings-label" htmlFor="settings-username">Username</label>
+                <input
+                  id="settings-username"
+                  type="text"
+                  className="settings-input"
+                  value={settingsUsername}
+                  onChange={e => setSettingsUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  maxLength={16}
+                  placeholder="username"
+                />
+                <span className="settings-hint">2-16 characters, letters, numbers, underscores</span>
+              </div>
+
+              {/* Display Name */}
+              <div className="settings-section">
+                <label className="settings-label" htmlFor="settings-displayname">Display Name</label>
+                <input
+                  id="settings-displayname"
+                  type="text"
+                  className="settings-input"
+                  value={settingsDisplayName}
+                  onChange={e => setSettingsDisplayName(e.target.value)}
+                  maxLength={32}
+                  placeholder="Display Name"
+                />
+                <span className="settings-hint">How your name appears to others</span>
+              </div>
+
+              {/* Error/Success messages */}
+              {settingsError && <div className="settings-error">{settingsError}</div>}
+              {settingsSuccess && <div className="settings-success">{settingsSuccess}</div>}
+            </div>
+
+            <div className="settings-footer">
+              <button className="settings-btn cancel" onClick={closeSettings}>
+                Cancel
+              </button>
+              <button 
+                className="settings-btn save" 
+                onClick={saveSettings}
+                disabled={settingsSaving}
+              >
+                {settingsSaving ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </div>

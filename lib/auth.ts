@@ -57,7 +57,7 @@ export async function getUserFromSessionToken(token: string) {
   const tokenHash = hashToken(token)
 
   const { rows } = await db.query(
-    `SELECT u.id, u.username, u.display_name
+    `SELECT u.id, u.username, u.display_name, u.profile_picture_url
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > now()

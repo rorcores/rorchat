@@ -11,6 +11,7 @@ interface Conversation {
   user_id: string | null
   username?: string | null
   display_name?: string | null
+  profile_picture_url?: string | null
 }
 
 interface Reaction {
@@ -33,6 +34,9 @@ interface Message {
   created_at: string
   reactions?: Reaction[]
   reply_to?: ReplyTo | null
+  image_url?: string | null
+  image_width?: number
+  image_height?: number
 }
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢']
@@ -564,11 +568,22 @@ export default function Admin() {
                     className={`conversation-item ${selectedConv?.id === conv.id ? 'active' : ''}`}
                     onClick={() => selectConversation(conv)}
                   >
-                    <div className="conversation-header">
-                      <span className="conversation-name">{getDisplayName(conv)}</span>
-                      <span className="conversation-time">{formatTime(conv.updated_at)}</span>
+                    <div className="conversation-item-content">
+                      <div className="conversation-avatar">
+                        {conv.profile_picture_url ? (
+                          <img src={conv.profile_picture_url} alt={getDisplayName(conv)} />
+                        ) : (
+                          <span>{getDisplayName(conv).charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div className="conversation-info">
+                        <div className="conversation-header">
+                          <span className="conversation-name">{getDisplayName(conv)}</span>
+                          <span className="conversation-time">{formatTime(conv.updated_at)}</span>
+                        </div>
+                        <div className="conversation-preview">@{getUsername(conv)}</div>
+                      </div>
                     </div>
-                    <div className="conversation-preview">@{getUsername(conv)}</div>
                   </div>
                 ))}
                 <div className="conversations-footer">
@@ -595,7 +610,13 @@ export default function Admin() {
                       <path d="M19 12H5M12 19l-7-7 7-7"/>
                     </svg>
                   </button>
-                  <div className="avatar">{getDisplayName(selectedConv).charAt(0).toUpperCase()}</div>
+                  {selectedConv.profile_picture_url ? (
+                    <div className="avatar-img">
+                      <img src={selectedConv.profile_picture_url} alt={getDisplayName(selectedConv)} />
+                    </div>
+                  ) : (
+                    <div className="avatar">{getDisplayName(selectedConv).charAt(0).toUpperCase()}</div>
+                  )}
                   <div className="chat-header-info">
                     <h2>{getDisplayName(selectedConv)}</h2>
                     <div className="status">@{getUsername(selectedConv)}</div>
@@ -634,7 +655,23 @@ export default function Admin() {
                             </div>
                           </div>
                         )}
-                        <div className="message-bubble">{msg.content}</div>
+                        {msg.image_url ? (
+                          <div className="message-image">
+                            <img 
+                              src={msg.image_url} 
+                              alt="Shared image"
+                              style={{
+                                maxWidth: '100%',
+                                maxHeight: '300px',
+                                borderRadius: '12px',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => window.open(msg.image_url!, '_blank')}
+                            />
+                          </div>
+                        ) : (
+                          <div className="message-bubble">{msg.content}</div>
+                        )}
                         
                         {/* Hover action buttons (desktop) */}
                         {msg.id && (

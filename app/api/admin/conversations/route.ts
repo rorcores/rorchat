@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { rows } = await db.query(
     `SELECT c.id, c.visitor_name, c.updated_at, c.user_id,
-            u.username, u.display_name
+            u.username, u.display_name, u.profile_picture_url
      FROM conversations c
      LEFT JOIN users u ON u.id = c.user_id
      ORDER BY c.updated_at DESC`

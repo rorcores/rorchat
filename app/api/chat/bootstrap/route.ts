@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
   // Get most recent messages only (paginated)
   const { rows } = await db.query(
-    `SELECT id, content, is_admin, created_at, reply_to_id
+    `SELECT id, content, is_admin, created_at, reply_to_id, image_url, image_width, image_height
      FROM messages
      WHERE conversation_id = $1
      ORDER BY created_at DESC
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
   ])
 
   // Attach reactions and reply info to messages
-  const messagesWithMeta = messages.map((msg: { id: string; content: string; is_admin: boolean; created_at: string; reply_to_id?: string }) => ({
+  const messagesWithMeta = messages.map((msg: { id: string; content: string; is_admin: boolean; created_at: string; reply_to_id?: string; image_url?: string; image_width?: number; image_height?: number }) => ({
     ...msg,
     reactions: reactions[msg.id] || [],
     reply_to: replyInfo[msg.id] || null
