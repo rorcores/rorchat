@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { useKeyboardHeight } from '@/lib/useKeyboardHeight'
+
+// Lazy load the cropper to avoid SSR issues
+const ImageCropper = lazy(() => import('@/lib/ImageCropper'))
 
 // Message validation constants (mirrored from server)
 const MAX_MESSAGE_LENGTH = 500
@@ -95,12 +98,12 @@ export default function Home() {
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false)
   const [settingsUsername, setSettingsUsername] = useState('')
-  const [settingsDisplayName, setSettingsDisplayName] = useState('')
   const [settingsProfilePic, setSettingsProfilePic] = useState<string | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState('')
   const [settingsSuccess, setSettingsSuccess] = useState('')
   const profilePicInputRef = useRef<HTMLInputElement>(null)
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null)
   
   // Image upload state for chat
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -579,10 +582,10 @@ export default function Home() {
   const openSettings = () => {
     if (currentUser) {
       setSettingsUsername(currentUser.username || '')
-      setSettingsDisplayName(currentUser.display_name || '')
       setSettingsProfilePic(currentUser.profile_picture_url || null)
       setSettingsError('')
       setSettingsSuccess('')
+      setImageToCrop(null)
       setShowSettings(true)
     }
   }
@@ -599,14 +602,27 @@ export default function Home() {
 
     try {
       setSettingsError('')
-      const processed = await processImageFile(file, 'profile')
-      setSettingsProfilePic(processed.dataUrl)
+      // Load image as data URL for cropper
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setImageToCrop(event.target?.result as string)
+      }
+      reader.readAsDataURL(file)
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : 'Failed to process image')
+      setSettingsError(err instanceof Error ? err.message : 'Failed to load image')
     }
     
     // Reset input so same file can be selected again
     e.target.value = ''
+  }
+
+  const handleCropComplete = (croppedDataUrl: string) => {
+    setSettingsProfilePic(croppedDataUrl)
+    setImageToCrop(null)
+  }
+
+  const handleCropCancel = () => {
+    setImageToCrop(null)
   }
 
   const saveSettings = async () => {
@@ -621,9 +637,8 @@ export default function Home() {
       
       if (settingsUsername !== currentUser.username) {
         updates.username = settingsUsername
-      }
-      if (settingsDisplayName !== (currentUser.display_name || '')) {
-        updates.display_name = settingsDisplayName
+        // Also update display_name to match username
+        updates.display_name = settingsUsername
       }
       if (settingsProfilePic !== (currentUser.profile_picture_url || null)) {
         updates.profile_picture = settingsProfilePic
@@ -1318,7 +1333,7 @@ export default function Home() {
                       <img src={settingsProfilePic} alt="Profile" />
                     ) : (
                       <div className="profile-pic-placeholder">
-                        {(settingsDisplayName || settingsUsername || 'U').charAt(0).toUpperCase()}
+                        {(settingsUsername || 'U').charAt(0).toUpperCase()}
                       </div>
                     )}
                   </div>
@@ -1366,21 +1381,6 @@ export default function Home() {
                 <span className="settings-hint">2-16 characters, letters, numbers, underscores</span>
               </div>
 
-              {/* Display Name */}
-              <div className="settings-section">
-                <label className="settings-label" htmlFor="settings-displayname">Display Name</label>
-                <input
-                  id="settings-displayname"
-                  type="text"
-                  className="settings-input"
-                  value={settingsDisplayName}
-                  onChange={e => setSettingsDisplayName(e.target.value)}
-                  maxLength={32}
-                  placeholder="Display Name"
-                />
-                <span className="settings-hint">How your name appears to others</span>
-              </div>
-
               {/* Error/Success messages */}
               {settingsError && <div className="settings-error">{settingsError}</div>}
               {settingsSuccess && <div className="settings-success">{settingsSuccess}</div>}
@@ -1400,6 +1400,17 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Image Cropper */}
+      {imageToCrop && (
+        <Suspense fallback={<div className="image-cropper-overlay"><div className="loading-spinner" /></div>}>
+          <ImageCropper
+            imageSrc={imageToCrop}
+            onCrop={handleCropComplete}
+            onCancel={handleCropCancel}
+          />
+        </Suspense>
       )}
     </div>
   )
