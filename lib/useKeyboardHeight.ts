@@ -16,6 +16,7 @@ function isMobileDevice() {
 export function useKeyboardHeight() {
   const lastKnownKeyboardHeight = useRef<number>(0)
   const isKeyboardOpen = useRef(false)
+  const stableViewportHeight = useRef<number>(0)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -24,13 +25,13 @@ export function useKeyboardHeight() {
     if (!isMobileDevice()) return
 
     const visualViewport = window.visualViewport
-    const initialHeight = window.innerHeight
-
-    // Set initial viewport height
-    document.documentElement.style.setProperty(
-      '--visual-viewport-height',
-      `${initialHeight}px`
-    )
+    
+    // Don't set --visual-viewport-height initially - let CSS 100dvh handle it
+    // This prevents issues on iOS where initial innerHeight can be wrong
+    // We'll capture the "stable" height when visualViewport is available
+    if (visualViewport) {
+      stableViewportHeight.current = visualViewport.height
+    }
 
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement
@@ -38,12 +39,15 @@ export function useKeyboardHeight() {
         isKeyboardOpen.current = true
         document.body.classList.add('keyboard-open')
         
+        // Get the current stable height (use visualViewport if available, otherwise window.innerHeight)
+        const currentHeight = stableViewportHeight.current || window.innerHeight
+        
         // Use last known keyboard height or estimate based on screen size
         // Typical iOS keyboard is ~40-45% of screen height
-        const estimatedKeyboardHeight = lastKnownKeyboardHeight.current || Math.round(initialHeight * 0.4)
-        const estimatedViewportHeight = initialHeight - estimatedKeyboardHeight
+        const estimatedKeyboardHeight = lastKnownKeyboardHeight.current || Math.round(currentHeight * 0.4)
+        const estimatedViewportHeight = currentHeight - estimatedKeyboardHeight
         
-        // Immediately set to estimated height for smooth transition
+        // Set to estimated height for smooth transition
         document.documentElement.style.setProperty(
           '--visual-viewport-height',
           `${estimatedViewportHeight}px`
@@ -66,29 +70,35 @@ export function useKeyboardHeight() {
           isKeyboardOpen.current = false
           document.body.classList.remove('keyboard-open')
           
-          // Restore full height
-          document.documentElement.style.setProperty(
-            '--visual-viewport-height',
-            `${initialHeight}px`
-          )
+          // Remove the CSS property entirely - let CSS 100dvh handle it
+          // This prevents stale height values from persisting
+          document.documentElement.style.removeProperty('--visual-viewport-height')
         }
       }, 100)
     }
 
     if (visualViewport) {
-      // Track actual keyboard height for future use
+      // Track actual keyboard height and stable viewport height
       const trackKeyboardHeight = () => {
-        const keyboardHeight = initialHeight - visualViewport.height
-        if (keyboardHeight > 100) {
-          // Only update if keyboard is actually showing
-          lastKnownKeyboardHeight.current = keyboardHeight
+        const currentVisualHeight = visualViewport.height
+        
+        // If keyboard is open, update to actual height
+        if (isKeyboardOpen.current) {
+          // Calculate keyboard height based on stable height
+          const keyboardHeight = stableViewportHeight.current - currentVisualHeight
+          if (keyboardHeight > 100) {
+            lastKnownKeyboardHeight.current = keyboardHeight
+          }
           
-          // If keyboard is open, update to actual height (refinement)
-          if (isKeyboardOpen.current) {
-            document.documentElement.style.setProperty(
-              '--visual-viewport-height',
-              `${visualViewport.height}px`
-            )
+          document.documentElement.style.setProperty(
+            '--visual-viewport-height',
+            `${currentVisualHeight}px`
+          )
+        } else {
+          // Keyboard is not open - update stable height reference
+          // Only update if it seems like a reasonable full height (not during keyboard transition)
+          if (currentVisualHeight > stableViewportHeight.current * 0.8 || stableViewportHeight.current === 0) {
+            stableViewportHeight.current = currentVisualHeight
           }
         }
       }
@@ -109,6 +119,8 @@ export function useKeyboardHeight() {
         visualViewport.removeEventListener('scroll', preventScroll)
         document.removeEventListener('focusin', handleFocusIn)
         document.removeEventListener('focusout', handleFocusOut)
+        // Clean up on unmount
+        document.documentElement.style.removeProperty('--visual-viewport-height')
       }
     }
 
@@ -118,6 +130,8 @@ export function useKeyboardHeight() {
     return () => {
       document.removeEventListener('focusin', handleFocusIn)
       document.removeEventListener('focusout', handleFocusOut)
+      // Clean up on unmount
+      document.documentElement.style.removeProperty('--visual-viewport-height')
     }
   }, [])
 }
