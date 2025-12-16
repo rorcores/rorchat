@@ -62,6 +62,9 @@ export default function Admin() {
   const isInitialLoadRef = useRef<boolean>(true)
   const prevMessageCountRef = useRef<number>(0)
   
+  // Image lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
+  
   // Handle mobile keyboard
   useKeyboardHeight()
   
@@ -503,13 +506,14 @@ export default function Admin() {
           <h2>Admin access</h2>
           <p>Enter your password to continue</p>
           {error && <div className="error-msg show">{error}</div>}
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLogin} autoComplete="off" data-form-type="other">
             <input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
+              autoComplete="off"
             />
             <button type="submit">Sign in</button>
           </form>
@@ -656,17 +660,10 @@ export default function Admin() {
                           </div>
                         )}
                         {msg.image_url ? (
-                          <div className="message-image">
+                          <div className="message-image" onClick={() => setLightboxImage(msg.image_url!)}>
                             <img 
                               src={msg.image_url} 
                               alt="Shared image"
-                              style={{
-                                maxWidth: '100%',
-                                maxHeight: '300px',
-                                borderRadius: '12px',
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => window.open(msg.image_url!, '_blank')}
                             />
                           </div>
                         ) : (
@@ -754,7 +751,7 @@ export default function Admin() {
                 <div ref={messagesEndRef} />
               </div>
 
-              <form className="reply-area" onSubmit={sendReply}>
+              <form className="reply-area" onSubmit={sendReply} autoComplete="off" data-form-type="other">
                 {/* Reply preview */}
                 {replyingTo && (
                   <div className="reply-preview">
@@ -783,6 +780,10 @@ export default function Admin() {
                     rows={1}
                     enterKeyHint="send"
                     autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="sentences"
+                    spellCheck="false"
+                    inputMode="text"
                     onInput={handleTyping}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -802,6 +803,18 @@ export default function Admin() {
           )}
         </main>
       </div>
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div className="image-lightbox" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+          <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </>
   )
 }

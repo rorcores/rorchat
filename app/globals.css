@@ -3275,6 +3275,16 @@ body {
   border-radius: 16px;
   overflow: hidden;
   background: var(--bg);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+}
+
+.message-image:active {
+  transform: scale(0.98);
 }
 
 .message.sent .message-image {
@@ -3289,6 +3299,89 @@ body {
   display: block;
   width: 100%;
   height: auto;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+/* ========================================
+   Image Lightbox
+   ======================================== */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 20px;
+  animation: lightboxIn 0.2s ease-out;
+  cursor: zoom-out;
+}
+
+@keyframes lightboxIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  cursor: default;
+  animation: lightboxImgIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lightboxImgIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  top: max(20px, env(safe-area-inset-top));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all 0.15s ease;
+  z-index: 301;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
+.lightbox-close:active {
+  transform: scale(0.95);
+}
+
+.lightbox-close svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* User profile picture in header */

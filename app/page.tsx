@@ -107,6 +107,9 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   
+  // Image lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
+  
   // Handle mobile keyboard
   useKeyboardHeight()
   
@@ -1023,17 +1026,10 @@ export default function Home() {
                       </div>
                     )}
                         {msg.image_url ? (
-                          <div className="message-image">
+                          <div className="message-image" onClick={() => setLightboxImage(msg.image_url!)}>
                             <img 
                               src={msg.image_url} 
                               alt="Shared image"
-                              style={{
-                                maxWidth: '100%',
-                                maxHeight: '300px',
-                                borderRadius: '12px',
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => window.open(msg.image_url!, '_blank')}
                             />
                           </div>
                         ) : (
@@ -1120,15 +1116,17 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </div>
 
-        <form className="input-area" onSubmit={sendMessage}>
-          {/* Hidden file input for images */}
-          <input
-            type="file"
-            ref={imageInputRef}
-            accept="image/jpeg,image/png,image/gif,image/webp"
-            style={{ display: 'none' }}
-            onChange={handleImageSelect}
-          />
+        {/* Hidden file input for images - outside form to prevent iOS form navigation */}
+        <input
+          type="file"
+          ref={imageInputRef}
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          tabIndex={-1}
+          style={{ display: 'none', position: 'absolute', pointerEvents: 'none' }}
+          onChange={handleImageSelect}
+        />
+        
+        <form className="input-area" onSubmit={sendMessage} autoComplete="off" data-form-type="other">
           
           {/* Image preview */}
           {imagePreview && (
@@ -1208,6 +1206,10 @@ export default function Home() {
               maxLength={MAX_MESSAGE_LENGTH}
               enterKeyHint="send"
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              spellCheck="false"
+              inputMode="text"
               onChange={(e) => {
                 setMessageInput(e.target.value)
                 if (rateLimitCountdown === 0) setMessageError('')
@@ -1281,6 +1283,18 @@ export default function Home() {
         </div>
       )}
 
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div className="image-lightbox" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+          <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
       {/* Settings Modal */}
       {showSettings && currentUser && (
         <div className="settings-overlay" onClick={closeSettings}>
@@ -1313,7 +1327,8 @@ export default function Home() {
                       type="file"
                       ref={profilePicInputRef}
                       accept="image/jpeg,image/png,image/gif,image/webp"
-                      style={{ display: 'none' }}
+                      tabIndex={-1}
+                      style={{ display: 'none', position: 'absolute', pointerEvents: 'none' }}
                       onChange={handleProfilePicChange}
                     />
                     <button 
