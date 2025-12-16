@@ -597,6 +597,7 @@ export default function Home() {
   const pickFile = (accept: string): Promise<File | null> => {
     return new Promise((resolve) => {
       let settled = false
+      let focusTimer: number | null = null
 
       const input = document.createElement('input')
       input.type = 'file'
@@ -609,6 +610,10 @@ export default function Home() {
       input.style.pointerEvents = 'none'
 
       const cleanup = () => {
+        if (focusTimer !== null) {
+          window.clearTimeout(focusTimer)
+          focusTimer = null
+        }
         window.removeEventListener('focus', onWindowFocus, true)
         input.remove()
       }
@@ -625,10 +630,14 @@ export default function Home() {
       }
 
       const onWindowFocus = () => {
-        // If the picker closes without a change event, treat it as cancel.
-        setTimeout(() => {
+        // Desktop browsers often fire `focus` before the input's `change` event.
+        // Delay the "treat as cancel" path, and only cancel if no file was selected.
+        if (focusTimer !== null) window.clearTimeout(focusTimer)
+        focusTimer = window.setTimeout(() => {
+          if (settled) return
+          if (input.files && input.files.length > 0) return
           settle(null)
-        }, 0)
+        }, 300)
       }
 
       input.addEventListener('change', onChange, { once: true })
