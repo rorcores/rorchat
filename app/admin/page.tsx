@@ -744,6 +744,8 @@ export default function Admin() {
                     name="reply"
                     placeholder="Type a reply..."
                     rows={1}
+                    enterKeyHint="send"
+                    autoComplete="off"
                     onInput={handleTyping}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {

@@ -932,6 +932,8 @@ export default function Home() {
               disabled={!currentUser || rateLimitCountdown > 0}
               value={messageInput}
               maxLength={MAX_MESSAGE_LENGTH}
+              enterKeyHint="send"
+              autoComplete="off"
               onChange={(e) => {
                 setMessageInput(e.target.value)
                 if (rateLimitCountdown === 0) setMessageError('')
