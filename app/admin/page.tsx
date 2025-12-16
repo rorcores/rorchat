@@ -420,12 +420,52 @@ export default function Admin() {
   // Image upload functions
   const pickFile = (accept: string): Promise<File | null> => {
     return new Promise((resolve) => {
+      let settled = false
+      let focusTimer: number | null = null
+
       const input = document.createElement('input')
       input.type = 'file'
       input.accept = accept
-      input.onchange = () => {
-        resolve(input.files?.[0] || null)
+      input.tabIndex = -1
+      input.style.position = 'fixed'
+      input.style.left = '-9999px'
+      input.style.top = '-9999px'
+      input.style.opacity = '0'
+      input.style.pointerEvents = 'none'
+
+      const cleanup = () => {
+        if (focusTimer !== null) {
+          window.clearTimeout(focusTimer)
+          focusTimer = null
+        }
+        window.removeEventListener('focus', onWindowFocus, true)
+        input.remove()
       }
+
+      const settle = (file: File | null) => {
+        if (settled) return
+        settled = true
+        resolve(file)
+        cleanup()
+      }
+
+      const onChange = () => {
+        settle(input.files?.[0] ?? null)
+      }
+
+      const onWindowFocus = () => {
+        if (focusTimer !== null) window.clearTimeout(focusTimer)
+        focusTimer = window.setTimeout(() => {
+          if (settled) return
+          if (input.files && input.files.length > 0) return
+          settle(null)
+        }, 300)
+      }
+
+      input.addEventListener('change', onChange, { once: true })
+      window.addEventListener('focus', onWindowFocus, true)
+
+      document.body.appendChild(input)
       input.click()
     })
   }
@@ -465,8 +505,8 @@ export default function Admin() {
     // Mark optimistic update
     lastOptimisticUpdateRef.current = Date.now()
 
-    // Optimistic update
-    setMessages(prev => [...prev, {
+    // Store values before clearing state
+    const tempMessage: Message = {
       content: '📷 Image',
       is_admin: true,
       created_at: new Date().toISOString(),
@@ -478,7 +518,10 @@ export default function Admin() {
         content: replyingTo.content,
         is_admin: replyingTo.is_admin
       } : null
-    }])
+    }
+    
+    // Optimistic update
+    setMessages(prev => [...prev, tempMessage])
 
     const replyToId = replyingTo?.id
     setImagePreview(null)
@@ -490,9 +533,9 @@ export default function Admin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversationId: selectedConv.id,
-          imageData: imagePreview.dataUrl,
-          imageWidth: imagePreview.width,
-          imageHeight: imagePreview.height,
+          imageData: tempMessage.image_url,
+          imageWidth: tempMessage.image_width,
+          imageHeight: tempMessage.image_height,
           replyToId
         })
       })
