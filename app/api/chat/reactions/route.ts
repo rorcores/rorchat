@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
+import { checkActionRateLimit } from '@/lib/validation'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,16 @@ export async function POST(request: NextRequest) {
 
   const user = await getUserFromSessionToken(token)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit check
+  const rateCheck = checkActionRateLimit(user.id, 'reaction')
+  if (!rateCheck.allowed) {
+    const retryAfterSec = Math.ceil((rateCheck.retryAfterMs || 60000) / 1000)
+    return NextResponse.json(
+      { error: `Too many reactions. Please wait ${retryAfterSec} seconds.` },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec) } }
+    )
+  }
 
   const { messageId, emoji } = await request.json()
 

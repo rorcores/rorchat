@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
 import { validateBase64Image, IMAGE_CONFIG } from '@/lib/imageUtils'
+import { checkActionRateLimit } from '@/lib/validation'
 
 export const runtime = 'nodejs'
 
@@ -10,6 +11,9 @@ const USERNAME_MIN = 2
 const USERNAME_MAX = 16
 const USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED = ['admin', 'root', 'system', 'rory', 'rorchat', 'support', 'mod', 'staff', 'api', 'www', 'ror', 'r', 'ro', 'rordogs', 'the_real_rory', 'rorr']
+
+// Username change limits
+const MAX_USERNAME_CHANGES_PER_DAY = 3
 
 function validateUsername(u: string): string | null {
   if (!u || typeof u !== 'string') return 'Username is required'
@@ -55,9 +59,23 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json()
     const { username, display_name, profile_picture } = body
 
+    // Rate limit check - stricter for profile picture uploads
+    const rateLimitAction = profile_picture !== undefined ? 'profilePicture' : 'profile'
+    const rateCheck = checkActionRateLimit(user.id, rateLimitAction)
+    if (!rateCheck.allowed) {
+      const retryAfterSec = Math.ceil((rateCheck.retryAfterMs || 60000) / 1000)
+      return NextResponse.json(
+        { error: `Too many profile updates. Please wait ${retryAfterSec} seconds.` },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSec) } }
+      )
+    }
+
     const updates: string[] = []
     const values: (string | null)[] = []
     let paramIndex = 1
+
+    // Track if we're changing the username (for daily limit update)
+    let isUsernameChange = false
 
     // Handle username change
     if (username !== undefined) {
@@ -69,19 +87,49 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: usernameError }, { status: 400 })
       }
 
-      // Check if username is already taken (by someone else)
-      const { rows: existingRows } = await db.query(
-        'SELECT id FROM users WHERE username = $1 AND id != $2',
-        [cleanUsername, user.id]
+      // Check if this is actually a change (not same username)
+      const { rows: currentUser } = await db.query(
+        'SELECT username, username_changes_today, username_change_date FROM users WHERE id = $1',
+        [user.id]
       )
       
-      if (existingRows.length > 0) {
-        return NextResponse.json({ error: 'Username is already taken' }, { status: 409 })
+      if (currentUser.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
 
-      updates.push(`username = $${paramIndex}`)
-      values.push(cleanUsername)
-      paramIndex++
+      const currentUsername = currentUser[0].username
+      
+      // Only apply limits if actually changing to a different username
+      if (cleanUsername !== currentUsername) {
+        isUsernameChange = true
+        
+        // Check daily username change limit
+        const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+        const changeDate = currentUser[0].username_change_date
+        const changesToday = currentUser[0].username_changes_today || 0
+        
+        // If last change was today and we've hit the limit, reject
+        if (changeDate === today && changesToday >= MAX_USERNAME_CHANGES_PER_DAY) {
+          return NextResponse.json(
+            { error: `You can only change your username ${MAX_USERNAME_CHANGES_PER_DAY} times per day. Try again tomorrow.` },
+            { status: 429 }
+          )
+        }
+
+        // Check if username is already taken (by someone else)
+        const { rows: existingRows } = await db.query(
+          'SELECT id FROM users WHERE username = $1 AND id != $2',
+          [cleanUsername, user.id]
+        )
+        
+        if (existingRows.length > 0) {
+          return NextResponse.json({ error: 'Username is already taken' }, { status: 409 })
+        }
+
+        updates.push(`username = $${paramIndex}`)
+        values.push(cleanUsername)
+        paramIndex++
+      }
     }
 
     // Handle display name change
@@ -119,6 +167,35 @@ export async function PATCH(request: NextRequest) {
 
     if (updates.length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    // If changing username, update the daily counter
+    if (isUsernameChange) {
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Fetch current state again to handle race conditions
+      const { rows: currentState } = await db.query(
+        'SELECT username_change_date, username_changes_today FROM users WHERE id = $1',
+        [user.id]
+      )
+      
+      const changeDate = currentState[0]?.username_change_date
+      const changesToday = currentState[0]?.username_changes_today || 0
+      
+      if (changeDate === today) {
+        // Same day - increment counter
+        updates.push(`username_changes_today = $${paramIndex}`)
+        values.push(String(changesToday + 1))
+        paramIndex++
+      } else {
+        // New day - reset counter to 1
+        updates.push(`username_changes_today = $${paramIndex}`)
+        values.push('1')
+        paramIndex++
+        updates.push(`username_change_date = $${paramIndex}`)
+        values.push(today)
+        paramIndex++
+      }
     }
 
     // Execute update

@@ -13,6 +13,9 @@ A **sleek, professional** web chat app. Users pick a username and chat with you 
 - 👤 **Simple auth** - Just username + password (no email required)
 - 🔄 **Live messaging** - Simple polling-based updates
 - 💬 **Typing indicators** - See when the other person is typing (like iMessage/WhatsApp)
+- 🖼️ **Profile pictures** - Upload and crop your own profile photo
+- 📷 **Image messages** - Share photos in chat (auto-compressed)
+- ✏️ **Change username** - Update your username anytime via Settings
 - ⚡ **Admin dashboard** - Manage all conversations at `/admin`
 - 🔐 **Secure** - Bcrypt password hashing, random session tokens (httpOnly cookies), DB locked down from anon
 
@@ -35,6 +38,28 @@ We use a **custom username/password system** (not Supabase Auth) for simplicity:
 - Reserved usernames blocked (admin, root, system, etc.)
 
 **Sessions:** httpOnly cookies containing a **random token** (token is hashed in DB), 30-day expiry.
+
+## Profile Pictures & Image Messages
+
+### Profile Pictures
+Users can upload a profile picture from the **Settings** panel (accessible via the user dropdown menu):
+- Select an image from your device
+- **Crop tool** lets you position and zoom before saving
+- Images are automatically resized to 256×256 and compressed to JPEG (~150KB max)
+- Profile pics are stored as base64 data URLs in the database
+
+### Image Messages
+Users can send photos in chat by tapping the 📷 button:
+- Select an image from your device
+- Preview before sending
+- Images are automatically resized (max 1200×1200) and compressed (~500KB max)
+- Click/tap any image in chat to view it full-screen in a lightbox
+
+### Changing Username
+Users can change their username anytime from **Settings**:
+- Same validation rules as signup (2-16 chars, starts with letter, alphanumeric + underscores)
+- Username must not already be taken by another user
+- Reserved usernames are blocked
 
 ## Security Model (Important)
 
@@ -99,6 +124,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT,
+    profile_picture_url TEXT,  -- Base64 data URL for profile picture
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -129,6 +155,9 @@ CREATE TABLE IF NOT EXISTS messages (
     content TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT false,
     reply_to_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    image_url TEXT,           -- Base64 data URL for image messages
+    image_width INTEGER,      -- Original width for proper rendering
+    image_height INTEGER,     -- Original height for proper rendering
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -199,18 +228,27 @@ rorchat/
 │       │   ├── messages/route.ts
 │       │   ├── reply/route.ts
 │       │   └── verify/route.ts     # Back-compat (calls login)
-│       └── auth/
-│           ├── signup/
-│           │   └── route.ts    # User registration
-│           ├── signin/
-│           │   └── route.ts    # User login
-│           ├── signout/
-│           │   └── route.ts    # User logout
-│           └── me/
-│               └── route.ts    # Get current user
+│       ├── auth/
+│       │   ├── signup/
+│       │   │   └── route.ts    # User registration
+│       │   ├── signin/
+│       │   │   └── route.ts    # User login
+│       │   ├── signout/
+│       │   │   └── route.ts    # User logout
+│       │   ├── me/
+│       │   │   └── route.ts    # Get current user
+│       │   └── profile/
+│       │       └── route.ts    # Update profile (pic, username)
+│       └── chat/
+│           ├── messages/
+│           │   └── route.ts    # Get/send messages
+│           └── upload/
+│               └── route.ts    # Upload image messages
 ├── lib/
 │   ├── db.ts               # Server-side DB pool
-│   └── auth.ts             # Session helpers
+│   ├── auth.ts             # Session helpers
+│   ├── imageUtils.ts       # Image processing (resize, compress)
+│   └── ImageCropper.tsx    # Profile picture crop tool
 ├── env.example             # Environment template
 └── package.json
 ```

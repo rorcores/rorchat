@@ -149,19 +149,44 @@ export async function processImage(
   }
 }
 
+// Allowed MIME types for server-side validation (no SVG - potential XSS vector)
+const ALLOWED_MIME_TYPES_SERVER = ['image/jpeg', 'image/png', 'image/webp']
+
 /**
  * Server-side validation for base64 image data
  */
 export function validateBase64Image(dataUrl: string, type: ImageType): { valid: boolean; error?: string } {
-  // Check it's a valid data URL
+  // Check it's a valid data URL format
   if (!dataUrl.startsWith('data:image/')) {
     return { valid: false, error: 'Invalid image format' }
+  }
+  
+  // Extract and validate MIME type (only allow jpeg, png, webp - no svg/gif)
+  const mimeMatch = dataUrl.match(/^data:(image\/[a-z]+);base64,/)
+  if (!mimeMatch) {
+    return { valid: false, error: 'Invalid image data format' }
+  }
+  
+  const mimeType = mimeMatch[1]
+  if (!ALLOWED_MIME_TYPES_SERVER.includes(mimeType)) {
+    return { valid: false, error: 'Only JPEG, PNG, and WebP images are allowed' }
   }
   
   // Extract the base64 part
   const base64 = dataUrl.split(',')[1]
   if (!base64) {
     return { valid: false, error: 'Invalid image data' }
+  }
+  
+  // Validate base64 is properly formatted (only valid base64 chars)
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
+  if (!base64Regex.test(base64)) {
+    return { valid: false, error: 'Invalid base64 encoding' }
+  }
+  
+  // Check minimum length (prevent empty/tiny images that aren't real)
+  if (base64.length < 100) {
+    return { valid: false, error: 'Image data too small' }
   }
   
   // Check size (base64 is ~33% larger than binary)

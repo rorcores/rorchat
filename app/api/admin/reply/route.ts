@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { db } from '@/lib/db'
 import { ADMIN_COOKIE } from '../login/route'
 import { notifyUserOfReply } from '@/lib/push'
+import { validateBase64Image } from '@/lib/imageUtils'
 
 export const runtime = 'nodejs'
 
@@ -25,15 +26,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { conversationId, content, replyToId } = await request.json()
+  const { conversationId, content, replyToId, imageData, imageWidth, imageHeight } = await request.json()
 
   if (!conversationId || typeof conversationId !== 'string') {
     return NextResponse.json({ error: 'conversationId is required' }, { status: 400 })
   }
 
-  const message = (content ?? '').toString().trim()
-  if (!message) return NextResponse.json({ error: 'Message is required' }, { status: 400 })
-  if (message.length > 5000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
+  const isImageMessage = !!imageData
+  const message = isImageMessage ? '📷 Image' : (content ?? '').toString().trim()
+  
+  if (!isImageMessage && !message) {
+    return NextResponse.json({ error: 'Message is required' }, { status: 400 })
+  }
+  if (!isImageMessage && message.length > 5000) {
+    return NextResponse.json({ error: 'Message too long' }, { status: 400 })
+  }
+
+  // Validate image if provided
+  if (isImageMessage) {
+    const validation = validateBase64Image(imageData, 'chat')
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    
+    const imgWidth = parseInt(imageWidth, 10) || 0
+    const imgHeight = parseInt(imageHeight, 10) || 0
+    if (imgWidth <= 0 || imgHeight <= 0 || imgWidth > 4096 || imgHeight > 4096) {
+      return NextResponse.json({ error: 'Invalid image dimensions' }, { status: 400 })
+    }
+  }
 
   // Validate replyToId if provided
   if (replyToId) {
@@ -47,10 +68,10 @@ export async function POST(request: NextRequest) {
   }
 
   const { rows } = await db.query(
-    `INSERT INTO messages (conversation_id, content, is_admin, reply_to_id)
-     VALUES ($1, $2, true, $3)
-     RETURNING id, content, is_admin, created_at, reply_to_id`,
-    [conversationId, message, replyToId || null]
+    `INSERT INTO messages (conversation_id, content, is_admin, reply_to_id, image_url, image_width, image_height)
+     VALUES ($1, $2, true, $3, $4, $5, $6)
+     RETURNING id, content, is_admin, created_at, reply_to_id, image_url, image_width, image_height`,
+    [conversationId, message, replyToId || null, imageData || null, imageWidth || null, imageHeight || null]
   )
 
   await db.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId])
@@ -61,8 +82,8 @@ export async function POST(request: NextRequest) {
     [conversationId]
   )
   if (convRows[0]?.user_id) {
-    // Don't await - fire and forget
-    notifyUserOfReply(convRows[0].user_id, message, conversationId).catch(() => {})
+    const notifyMsg = isImageMessage ? '📷 Sent an image' : message
+    notifyUserOfReply(convRows[0].user_id, notifyMsg, conversationId).catch(() => {})
   }
 
   return NextResponse.json({ message: rows[0] })

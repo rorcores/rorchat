@@ -1719,6 +1719,7 @@ body {
     border-radius: 16px;
     top: 24px;
     bottom: 24px;
+    height: auto; /* Override 100dvh - let top/bottom define height */
     box-shadow: 
       0 0 0 1px rgba(0, 0, 0, 0.08),
       0 8px 32px rgba(0, 0, 0, 0.12);

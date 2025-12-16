@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getUserFromSessionToken, SESSION_COOKIE } from '@/lib/auth'
+import { checkActionRateLimit } from '@/lib/validation'
 
 export const runtime = 'nodejs'
 
@@ -10,6 +11,13 @@ export async function POST(request: NextRequest) {
 
   const user = await getUserFromSessionToken(token)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit check (typing indicators are frequent but should still be limited)
+  const rateCheck = checkActionRateLimit(user.id, 'typing')
+  if (!rateCheck.allowed) {
+    // Silently reject - don't show error for typing indicators
+    return NextResponse.json({ ok: true })
+  }
 
   const { conversationId, isTyping } = await request.json()
 

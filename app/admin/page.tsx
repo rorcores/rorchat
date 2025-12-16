@@ -65,6 +65,10 @@ export default function Admin() {
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   
+  // Image upload state
+  const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  
   // Handle mobile keyboard
   useKeyboardHeight()
   
@@ -339,6 +343,7 @@ export default function Admin() {
     setMobileView('chat')
     setReplyingTo(null)
     setActiveReactionPicker(null)
+    setImagePreview(null)
     // Reset scroll tracking for new conversation
     isInitialLoadRef.current = true
     prevMessageCountRef.current = 0
@@ -366,6 +371,7 @@ export default function Admin() {
     setReplyingTo(null)
     setActiveReactionPicker(null)
     setIsUserTyping(false)
+    setImagePreview(null)
   }
 
   const sendReply = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -411,15 +417,117 @@ export default function Admin() {
     })
   }
 
+  // Image upload functions
+  const pickFile = (accept: string): Promise<File | null> => {
+    return new Promise((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = accept
+      input.onchange = () => {
+        resolve(input.files?.[0] || null)
+      }
+      input.click()
+    })
+  }
+
+  const pickChatImage = async () => {
+    if (!selectedConv || imagePreview) return
+    const file = await pickFile('image/jpeg,image/png,image/gif,image/webp')
+    if (!file) return
+    
+    try {
+      const { processImage, validateImageFile } = await import('@/lib/imageUtils')
+      const validation = validateImageFile(file)
+      if (!validation.valid) {
+        setError(validation.error || 'Invalid image')
+        return
+      }
+      const processed = await processImage(file, 'chat')
+      setImagePreview({
+        dataUrl: processed.dataUrl,
+        width: processed.width,
+        height: processed.height
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process image')
+    }
+  }
+
+  const cancelImageUpload = () => {
+    setImagePreview(null)
+  }
+
+  const sendImageMessage = async () => {
+    if (!selectedConv || !imagePreview || uploadingImage) return
+
+    setUploadingImage(true)
+
+    // Mark optimistic update
+    lastOptimisticUpdateRef.current = Date.now()
+
+    // Optimistic update
+    setMessages(prev => [...prev, {
+      content: '📷 Image',
+      is_admin: true,
+      created_at: new Date().toISOString(),
+      image_url: imagePreview.dataUrl,
+      image_width: imagePreview.width,
+      image_height: imagePreview.height,
+      reply_to: replyingTo ? {
+        id: replyingTo.id!,
+        content: replyingTo.content,
+        is_admin: replyingTo.is_admin
+      } : null
+    }])
+
+    const replyToId = replyingTo?.id
+    setImagePreview(null)
+    setReplyingTo(null)
+
+    try {
+      await fetch('/api/admin/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: selectedConv.id,
+          imageData: imagePreview.dataUrl,
+          imageWidth: imagePreview.width,
+          imageHeight: imagePreview.height,
+          replyToId
+        })
+      })
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
-    const diff = now.getTime() - date.getTime()
-
-    if (diff < 60000) return 'Just now'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    if (diff < 86400000) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+    
+    // Check if it's today by comparing dates (not just time diff)
+    const isToday = date.toDateString() === now.toDateString()
+    
+    if (isToday) {
+      const diff = now.getTime() - date.getTime()
+      if (diff < 60000) return 'Just now'
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    
+    // Not today - show relative days/weeks
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 7) return `${diffDays}d`
+    
+    const diffWeeks = Math.floor(diffDays / 7)
+    if (diffWeeks < 4) return `${diffWeeks}w`
+    
+    const diffMonths = Math.floor(diffDays / 30)
+    if (diffMonths < 12) return `${diffMonths}mo`
+    
+    const diffYears = Math.floor(diffDays / 365)
+    return `${diffYears}y`
   }
 
   const getDisplayName = (conv: Conversation) => {
@@ -754,8 +862,30 @@ export default function Admin() {
               </div>
 
               <form className="reply-area" onSubmit={sendReply} autoComplete="off" data-form-type="other">
+                {/* Image preview */}
+                {imagePreview && (
+                  <div className="image-preview">
+                    <img src={imagePreview.dataUrl} alt="Preview" />
+                    <div className="image-preview-actions">
+                      <button type="button" className="image-preview-cancel" onClick={cancelImageUpload}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                      </button>
+                      <button 
+                        type="button" 
+                        className="image-preview-send" 
+                        onClick={sendImageMessage}
+                        disabled={uploadingImage}
+                      >
+                        {uploadingImage ? 'Sending...' : 'Send'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Reply preview */}
-                {replyingTo && (
+                {replyingTo && !imagePreview && (
                   <div className="reply-preview">
                     <div className="reply-preview-content">
                       <span className="reply-preview-label">
@@ -775,6 +905,20 @@ export default function Admin() {
                   </div>
                 )}
                 <div className="reply-input-wrapper">
+                  {!imagePreview && (
+                    <button 
+                      type="button" 
+                      className="image-picker-btn"
+                      onClick={pickChatImage}
+                      title="Send image"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
+                      </svg>
+                    </button>
+                  )}
                   <textarea
                     className="reply-input"
                     name="reply"
@@ -786,6 +930,7 @@ export default function Admin() {
                     autoCapitalize="sentences"
                     spellCheck="false"
                     inputMode="text"
+                    disabled={!!imagePreview}
                     onInput={handleTyping}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -794,7 +939,7 @@ export default function Admin() {
                       }
                     }}
                   />
-                  <button type="submit" className="send-btn">
+                  <button type="submit" className="send-btn" disabled={!!imagePreview}>
                     <svg viewBox="0 0 24 24">
                       <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                     </svg>

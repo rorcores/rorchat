@@ -72,3 +72,61 @@ export function cleanupRateLimitData(): void {
     }
   }
 }
+
+// ============================================
+// Generic rate limiting for other actions
+// ============================================
+
+type RateLimitConfig = {
+  windowMs: number
+  maxRequests: number
+}
+
+const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
+  // Profile updates: 5 per 5 minutes (prevent spam/impersonation)
+  profile: { windowMs: 5 * 60_000, maxRequests: 5 },
+  // Profile picture: 3 per 10 minutes (expensive operation)
+  profilePicture: { windowMs: 10 * 60_000, maxRequests: 3 },
+  // Reactions: 30 per minute (allow quick reactions but prevent spam)
+  reaction: { windowMs: 60_000, maxRequests: 30 },
+  // Typing indicators: 20 per minute (frequent but limited)
+  typing: { windowMs: 60_000, maxRequests: 20 },
+}
+
+// Separate tracking maps for each action type
+const actionTimestamps: Map<string, Map<string, number[]>> = new Map()
+
+export function checkActionRateLimit(
+  userId: string, 
+  action: keyof typeof RATE_LIMIT_CONFIGS
+): { allowed: boolean; retryAfterMs?: number } {
+  const config = RATE_LIMIT_CONFIGS[action]
+  if (!config) {
+    return { allowed: true } // Unknown action, allow by default
+  }
+
+  const now = Date.now()
+  
+  // Get or create the map for this action type
+  if (!actionTimestamps.has(action)) {
+    actionTimestamps.set(action, new Map())
+  }
+  const actionMap = actionTimestamps.get(action)!
+  
+  const timestamps = actionMap.get(userId) || []
+  
+  // Remove timestamps older than the window
+  const recentTimestamps = timestamps.filter(ts => now - ts < config.windowMs)
+  
+  if (recentTimestamps.length >= config.maxRequests) {
+    const oldestInWindow = Math.min(...recentTimestamps)
+    const retryAfterMs = config.windowMs - (now - oldestInWindow)
+    return { allowed: false, retryAfterMs }
+  }
+  
+  // Add current timestamp and update map
+  recentTimestamps.push(now)
+  actionMap.set(userId, recentTimestamps)
+  
+  return { allowed: true }
+}
