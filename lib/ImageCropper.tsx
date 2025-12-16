@@ -53,18 +53,23 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     // Draw image
     ctx.drawImage(image, x, y, scaledWidth, scaledHeight)
 
-    // Draw dark overlay with circular cutout
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Save the current state
+    ctx.save()
     
-    // Cut out circle
-    ctx.globalCompositeOperation = 'destination-out'
+    // Create a path for the area OUTSIDE the circle
     ctx.beginPath()
-    ctx.arc(canvas.width / 2, canvas.height / 2, CROP_SIZE / 2, 0, Math.PI * 2)
+    // Outer rectangle (full canvas)
+    ctx.rect(0, 0, canvas.width, canvas.height)
+    // Inner circle (counter-clockwise to cut it out)
+    ctx.arc(canvas.width / 2, canvas.height / 2, CROP_SIZE / 2, 0, Math.PI * 2, true)
+    ctx.closePath()
+    
+    // Fill the outside area with dark overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
     ctx.fill()
     
-    // Reset composite operation
-    ctx.globalCompositeOperation = 'source-over'
+    // Restore state
+    ctx.restore()
     
     // Draw circle border
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'

@@ -500,25 +500,27 @@ export default function Admin() {
         <div className="gradient-orb orb-1"></div>
       </div>
 
-      <div className={`admin-modal ${isAuthenticated ? 'hidden' : ''}`}>
-        <div className="admin-modal-content">
-          <div className="admin-icon">🔐</div>
-          <h2>Admin access</h2>
-          <p>Enter your password to continue</p>
-          {error && <div className="error-msg show">{error}</div>}
-          <form onSubmit={handleLogin} autoComplete="off" data-form-type="other">
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              autoComplete="off"
-            />
-            <button type="submit">Sign in</button>
-          </form>
+      {!isAuthenticated && (
+        <div className="admin-modal">
+          <div className="admin-modal-content">
+            <div className="admin-icon">🔐</div>
+            <h2>Admin access</h2>
+            <p>Enter your password to continue</p>
+            {error && <div className="error-msg show">{error}</div>}
+            <form onSubmit={handleLogin} autoComplete="off" data-form-type="other">
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+                autoComplete="off"
+              />
+              <button type="submit">Sign in</button>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={`admin-app ${mobileView === 'chat' ? 'mobile-chat-view' : 'mobile-list-view'}`} style={{ display: isAuthenticated ? 'flex' : 'none' }}>
         <aside className="sidebar">

@@ -102,13 +102,11 @@ export default function Home() {
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState('')
   const [settingsSuccess, setSettingsSuccess] = useState('')
-  const profilePicInputRef = useRef<HTMLInputElement>(null)
   const [imageToCrop, setImageToCrop] = useState<string | null>(null)
   
   // Image upload state for chat
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
   
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
@@ -596,10 +594,52 @@ export default function Home() {
     setSettingsSuccess('')
   }
 
-  const handleProfilePicChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const pickFile = (accept: string): Promise<File | null> => {
+    return new Promise((resolve) => {
+      let settled = false
 
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = accept
+      input.tabIndex = -1
+      input.style.position = 'fixed'
+      input.style.left = '-9999px'
+      input.style.top = '-9999px'
+      input.style.opacity = '0'
+      input.style.pointerEvents = 'none'
+
+      const cleanup = () => {
+        window.removeEventListener('focus', onWindowFocus, true)
+        input.remove()
+      }
+
+      const settle = (file: File | null) => {
+        if (settled) return
+        settled = true
+        resolve(file)
+        cleanup()
+      }
+
+      const onChange = () => {
+        settle(input.files?.[0] ?? null)
+      }
+
+      const onWindowFocus = () => {
+        // If the picker closes without a change event, treat it as cancel.
+        setTimeout(() => {
+          settle(null)
+        }, 0)
+      }
+
+      input.addEventListener('change', onChange, { once: true })
+      window.addEventListener('focus', onWindowFocus, true)
+
+      document.body.appendChild(input)
+      input.click()
+    })
+  }
+
+  const handleProfilePicFile = async (file: File) => {
     try {
       setSettingsError('')
       // Load image as data URL for cropper
@@ -611,9 +651,12 @@ export default function Home() {
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'Failed to load image')
     }
-    
-    // Reset input so same file can be selected again
-    e.target.value = ''
+  }
+
+  const pickProfilePhoto = async () => {
+    const file = await pickFile('image/jpeg,image/png,image/gif,image/webp')
+    if (!file) return
+    await handleProfilePicFile(file)
   }
 
   const handleCropComplete = (croppedDataUrl: string) => {
@@ -677,10 +720,7 @@ export default function Home() {
   }
 
   // Image upload for chat
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const handleChatImageFile = async (file: File) => {
     try {
       setMessageError('')
       const processed = await processImageFile(file, 'chat')
@@ -692,8 +732,13 @@ export default function Home() {
     } catch (err) {
       setMessageError(err instanceof Error ? err.message : 'Failed to process image')
     }
-    
-    e.target.value = ''
+  }
+
+  const pickChatImage = async () => {
+    if (!currentUser || rateLimitCountdown > 0 || imagePreview) return
+    const file = await pickFile('image/jpeg,image/png,image/gif,image/webp')
+    if (!file) return
+    await handleChatImageFile(file)
   }
 
   const cancelImageUpload = () => {
@@ -1131,16 +1176,6 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Hidden file input for images - outside form to prevent iOS form navigation */}
-        <input
-          type="file"
-          ref={imageInputRef}
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          tabIndex={-1}
-          style={{ display: 'none', position: 'absolute', pointerEvents: 'none' }}
-          onChange={handleImageSelect}
-        />
-        
         <form className="input-area" onSubmit={sendMessage} autoComplete="off" data-form-type="other">
           
           {/* Image preview */}
@@ -1200,7 +1235,7 @@ export default function Home() {
               <button 
                 type="button" 
                 className="image-picker-btn"
-                onClick={() => imageInputRef.current?.click()}
+                onClick={pickChatImage}
                 disabled={!currentUser || rateLimitCountdown > 0}
                 title="Send image"
               >
@@ -1338,18 +1373,10 @@ export default function Home() {
                     )}
                   </div>
                   <div className="profile-pic-actions">
-                    <input
-                      type="file"
-                      ref={profilePicInputRef}
-                      accept="image/jpeg,image/png,image/gif,image/webp"
-                      tabIndex={-1}
-                      style={{ display: 'none', position: 'absolute', pointerEvents: 'none' }}
-                      onChange={handleProfilePicChange}
-                    />
                     <button 
                       type="button" 
                       className="profile-pic-btn"
-                      onClick={() => profilePicInputRef.current?.click()}
+                      onClick={pickProfilePhoto}
                     >
                       Change Photo
                     </button>
