@@ -133,7 +133,7 @@ export default function Home() {
     {
       quote: "Rory I am not going to use this to contact you",
       author: "Olivia",
-      title: "Rory's other neighbor, New York"
+      title: "Rory's neighbor, New York"
     },
   ]
 
