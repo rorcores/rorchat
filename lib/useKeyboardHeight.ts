@@ -2,12 +2,26 @@
 
 import { useEffect, useRef } from 'react'
 
+// Check if device has a virtual keyboard (mobile/tablet with touch)
+function isMobileDevice() {
+  if (typeof window === 'undefined') return false
+  
+  // Check for touch capability AND small screen (to exclude touch laptops)
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+  const isSmallScreen = window.innerWidth <= 768
+  
+  return hasTouch && isSmallScreen
+}
+
 export function useKeyboardHeight() {
   const lastKnownKeyboardHeight = useRef<number>(0)
   const isKeyboardOpen = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    
+    // Only run on mobile devices with virtual keyboards
+    if (!isMobileDevice()) return
 
     const visualViewport = window.visualViewport
     const initialHeight = window.innerHeight
