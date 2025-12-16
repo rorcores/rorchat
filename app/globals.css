@@ -28,6 +28,8 @@ html, body {
   height: 100dvh;
   height: var(--visual-viewport-height, 100dvh);
   overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -36,6 +38,20 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   position: relative;
+}
+
+/* iOS Safari: prevent input focus-zoom (keeps keyboard UI from feeling huge) */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* Desktop: dark background with centered phone mockup */
