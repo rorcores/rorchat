@@ -446,8 +446,8 @@ export default function Home() {
     setMessages([])
   }
 
-  const sendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const sendMessage = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault()
     if (!conversationId) return
     
     // Don't allow sending if rate limited
@@ -1176,7 +1176,8 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </div>
 
-        <form className="input-area" onSubmit={sendMessage} autoComplete="off" data-form-type="other">
+        {/* Not a <form>: avoids iOS Safari's Prev/Next/Done accessory bar */}
+        <div className="input-area" role="form" aria-label="Message composer">
           
           {/* Image preview */}
           {imagePreview && (
@@ -1248,7 +1249,7 @@ export default function Home() {
             )}
             <textarea 
               className="message-input" 
-              name="message"
+              aria-label="Message"
               placeholder={rateLimitCountdown > 0 ? `Wait ${rateLimitCountdown}s...` : "Message..."}
               rows={1}
               disabled={!currentUser || rateLimitCountdown > 0 || !!imagePreview}
@@ -1268,11 +1269,16 @@ export default function Home() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  e.currentTarget.form?.requestSubmit()
+                  void sendMessage()
                 }
               }}
             />
-            <button type="submit" className="send-btn" disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0 || !!imagePreview}>
+            <button
+              type="button"
+              className="send-btn"
+              onClick={() => void sendMessage()}
+              disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0 || !!imagePreview}
+            >
               <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
               </svg>
@@ -1283,7 +1289,7 @@ export default function Home() {
               {messageInput.length}/{MAX_MESSAGE_LENGTH}
             </div>
           )}
-        </form>
+        </div>
       </div>
 
       {/* Auth Modal Overlay */}
