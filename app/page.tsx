@@ -1061,7 +1061,7 @@ export default function Home() {
             <div className="welcome-chat">
               <div className="welcome-icon">💬</div>
               <h3>Start a conversation</h3>
-              <p>Send a message and Rory will get back to you soon.</p>
+              <p>Rory will reply to you as soon as possible!</p>
             </div>
           ) : (
             displayMessages.map((msg, i) => {
