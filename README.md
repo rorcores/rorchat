@@ -138,6 +138,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_seen_at TIMESTAMPTZ
 );
 
+-- Admin sessions table
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ
+);
+
 -- Conversations table
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -175,11 +184,13 @@ CREATE TABLE IF NOT EXISTS message_reactions (
 -- Lock down Supabase public API access (browser should not access tables directly)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE users FROM anon, authenticated;
 REVOKE ALL ON TABLE sessions FROM anon, authenticated;
+REVOKE ALL ON TABLE admin_sessions FROM anon, authenticated;
 REVOKE ALL ON TABLE conversations FROM anon, authenticated;
 REVOKE ALL ON TABLE messages FROM anon, authenticated;
 
@@ -202,6 +213,7 @@ REVOKE ALL ON TABLE message_reactions FROM anon, authenticated;
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_typing_status_conversation ON typing_status(conversation_id);

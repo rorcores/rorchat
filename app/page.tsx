@@ -94,7 +94,8 @@ export default function Home() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
-  
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false)
   const [settingsUsername, setSettingsUsername] = useState('')
@@ -103,17 +104,17 @@ export default function Home() {
   const [settingsError, setSettingsError] = useState('')
   const [settingsSuccess, setSettingsSuccess] = useState('')
   const [imageToCrop, setImageToCrop] = useState<string | null>(null)
-  
+
   // Image upload state for chat
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
-  
+
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
-  
+
   // Handle mobile keyboard
   useKeyboardHeight()
-  
+
   // Push notifications
   const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
     subscribeEndpoint: '/api/push/subscribe'
@@ -179,7 +180,7 @@ export default function Home() {
 
   // Track message count to only auto-scroll when new messages arrive
   const prevMessageCountRef = useRef(0)
-  
+
   useEffect(() => {
     // Only scroll if new messages were added
     if (messages.length > prevMessageCountRef.current) {
@@ -198,7 +199,7 @@ export default function Home() {
   // Rate limit countdown timer
   useEffect(() => {
     if (rateLimitCountdown <= 0) return
-    
+
     const timer = setInterval(() => {
       setRateLimitCountdown(prev => {
         if (prev <= 1) {
@@ -208,9 +209,20 @@ export default function Home() {
         return prev - 1
       })
     }, 1000)
-    
+
     return () => clearInterval(timer)
   }, [rateLimitCountdown])
+
+  // Auto-resize textarea when input changes
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Reset height to auto to correctly calculate scrollHeight for shrinking
+    textarea.style.height = 'auto'
+    // Set new height based on scrollHeight + borders (2px top + 2px bottom = 4px)
+    textarea.style.height = `${textarea.scrollHeight + 4}px`
+  }, [messageInput])
 
   const checkAuth = async () => {
     try {
@@ -257,7 +269,7 @@ export default function Home() {
       if (Date.now() - lastOptimisticUpdateRef.current < 3000) {
         return
       }
-      
+
       // Use functional state to get the latest messages without adding to dependencies
       let lastMessageId: string | null = null
       setMessages(prev => {
@@ -270,36 +282,36 @@ export default function Home() {
         }
         return prev // Don't actually change state, just read it
       })
-      
-      const url = lastMessageId 
+
+      const url = lastMessageId
         ? `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}&after=${encodeURIComponent(lastMessageId)}`
         : `/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`
-      
+
       const res = await fetch(url)
       if (!res.ok) return
       const data = await res.json()
       if (cancelled) return
-      
+
       if (data.messages?.length > 0) {
         setMessages(prev => {
           // Build a set of existing message IDs for deduplication
           const existingIds = new Set(prev.map(m => m.id).filter(Boolean))
-          
+
           // Filter out any messages we already have
           const newMessages = data.messages.filter((m: Message) => m.id && !existingIds.has(m.id))
-          
+
           if (newMessages.length === 0) return prev // No new messages, don't update state
-          
+
           // Remove any optimistic messages that match new messages by content
           // (optimistic messages have no id but same content)
           const prevWithoutOptimistic = prev.filter(m => {
             if (m.id) return true // Keep messages with IDs
             // Check if any new message matches this optimistic one
-            return !newMessages.some((nm: Message) => 
+            return !newMessages.some((nm: Message) =>
               nm.content === m.content && nm.is_admin === m.is_admin
             )
           })
-          
+
           return [...prevWithoutOptimistic, ...newMessages]
         })
       } else if (!lastMessageId) {
@@ -307,7 +319,7 @@ export default function Home() {
         setMessages(data.messages || [])
         setHasMoreMessages(data.hasMore || false)
       }
-      
+
       setIsAdminTyping(data.adminTyping || false)
     }, 2000)
 
@@ -320,12 +332,12 @@ export default function Home() {
   // Load older messages when scrolling to top
   const loadMoreMessages = async () => {
     if (!conversationId || !hasMoreMessages || loadingMore || messages.length === 0) return
-    
+
     const oldestMessage = messages[0]
     if (!oldestMessage.id) return
 
     setLoadingMore(true)
-    
+
     // Save scroll position
     const container = messagesContainerRef.current
     const scrollHeightBefore = container?.scrollHeight || 0
@@ -340,14 +352,14 @@ export default function Home() {
         return
       }
       const data = await res.json()
-      
+
       // Always update hasMore from server response (defaults to false)
       const hasMore = data.hasMore === true
       setHasMoreMessages(hasMore)
-      
+
       if (data.messages?.length > 0) {
         setMessages(prev => [...data.messages, ...prev])
-        
+
         // Restore scroll position after DOM update
         requestAnimationFrame(() => {
           if (container) {
@@ -368,7 +380,7 @@ export default function Home() {
   const handleScroll = () => {
     const container = messagesContainerRef.current
     if (!container) return
-    
+
     // Load more when scrolled within 100px of the top
     if (container.scrollTop < 100 && hasMoreMessages && !loadingMore) {
       loadMoreMessages()
@@ -378,7 +390,7 @@ export default function Home() {
   // Send typing status to server
   const sendTypingStatus = async (isTyping: boolean) => {
     if (!conversationId) return
-    
+
     // Debounce: don't send more than once per second
     const now = Date.now()
     if (isTyping && now - lastTypingSentRef.current < 1000) return
@@ -388,17 +400,17 @@ export default function Home() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationId, isTyping })
-    }).catch(() => {})
+    }).catch(() => { })
   }
 
   const handleTyping = () => {
     sendTypingStatus(true)
-    
+
     // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    
+
     // Set timeout to clear typing status after 2 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
       sendTypingStatus(false)
@@ -439,7 +451,7 @@ export default function Home() {
     // Close the dropdown immediately
     const dropdown = document.querySelector('.user-dropdown.show')
     dropdown?.classList.remove('show')
-    
+
     await fetch('/api/auth/signout', { method: 'POST' })
     setCurrentUser(null)
     setConversationId(null)
@@ -449,12 +461,12 @@ export default function Home() {
   const sendMessage = async (e?: React.SyntheticEvent) => {
     e?.preventDefault()
     if (!conversationId) return
-    
+
     // Don't allow sending if rate limited
     if (rateLimitCountdown > 0) return
 
     const content = messageInput.trim()
-    
+
     // Client-side validation
     const validation = validateMessageContent(content)
     if (!validation.valid) {
@@ -497,7 +509,7 @@ export default function Home() {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      
+
       // Handle rate limiting with countdown
       if (res.status === 429) {
         const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10)
@@ -506,7 +518,7 @@ export default function Home() {
       } else {
         setMessageError(data.error || 'Failed to send message')
       }
-      
+
       // fallback: refresh from server
       const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
       if (refresh.ok) {
@@ -518,19 +530,19 @@ export default function Home() {
 
   const handleReaction = async (messageId: string | undefined, emoji: string) => {
     if (!messageId || !conversationId) return
-    
+
     setActiveReactionPicker(null)
-    
+
     // Mark that an optimistic update is happening
     lastOptimisticUpdateRef.current = Date.now()
-    
+
     // Optimistic update
     setMessages(prev => prev.map(msg => {
       if (msg.id !== messageId) return msg
-      
+
       const reactions = [...(msg.reactions || [])]
       const existingIdx = reactions.findIndex(r => r.emoji === emoji)
-      
+
       if (existingIdx >= 0) {
         const existing = reactions[existingIdx]
         if (existing.hasUser) {
@@ -548,17 +560,17 @@ export default function Home() {
         }
       } else {
         // Remove user's other reactions first
-        const cleanedReactions = reactions.map(r => 
+        const cleanedReactions = reactions.map(r =>
           r.hasUser ? { ...r, count: r.count - 1, hasUser: false } : r
         ).filter(r => r.count > 0)
         cleanedReactions.push({ emoji, count: 1, hasAdmin: false, hasUser: true })
         reactions.length = 0
         reactions.push(...cleanedReactions)
       }
-      
+
       return { ...msg, reactions }
     }))
-    
+
     // Send to server
     await fetch('/api/chat/reactions', {
       method: 'POST',
@@ -679,14 +691,14 @@ export default function Home() {
 
   const saveSettings = async () => {
     if (!currentUser) return
-    
+
     setSettingsSaving(true)
     setSettingsError('')
     setSettingsSuccess('')
 
     try {
       const updates: Record<string, string | null> = {}
-      
+
       if (settingsUsername !== currentUser.username) {
         updates.username = settingsUsername
         // Also update display_name to match username
@@ -718,7 +730,7 @@ export default function Home() {
       // Update local user state
       setCurrentUser(data.user)
       setSettingsSuccess('Settings saved!')
-      
+
       // Close modal after short delay
       setTimeout(() => closeSettings(), 1500)
     } catch {
@@ -740,6 +752,21 @@ export default function Home() {
       })
     } catch (err) {
       setMessageError(err instanceof Error ? err.message : 'Failed to process image')
+    }
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile()
+        if (file) {
+          e.preventDefault()
+          if (!currentUser || rateLimitCountdown > 0 || imagePreview) return
+          await handleChatImageFile(file)
+          break
+        }
+      }
     }
   }
 
@@ -779,7 +806,7 @@ export default function Home() {
       } : null
     }
     setMessages(prev => [...prev, tempMessage])
-    
+
     const replyToId = replyingTo?.id
     setImagePreview(null)
     setReplyingTo(null)
@@ -799,7 +826,7 @@ export default function Home() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        
+
         if (res.status === 429) {
           const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10)
           setRateLimitCountdown(retryAfter)
@@ -807,7 +834,7 @@ export default function Home() {
         } else {
           setMessageError(data.error || 'Failed to send image')
         }
-        
+
         // Refresh from server on error
         const refresh = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
         if (refresh.ok) {
@@ -822,14 +849,14 @@ export default function Home() {
 
   const showReactionPicker = (messageId: string | undefined) => {
     if (!messageId) return
-    
+
     // Clear any existing timeout
     if (reactionPickerTimeoutRef.current) {
       clearTimeout(reactionPickerTimeoutRef.current)
     }
-    
+
     setActiveReactionPicker(messageId)
-    
+
     // Auto-hide after 5 seconds
     reactionPickerTimeoutRef.current = setTimeout(() => {
       setActiveReactionPicker(null)
@@ -846,7 +873,7 @@ export default function Home() {
   // Long press handlers for mobile
   const handleMessageTouchStart = (messageId: string | undefined) => {
     if (!messageId || !currentUser) return
-    
+
     longPressTriggeredRef.current = false
     longPressTimeoutRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true
@@ -872,9 +899,9 @@ export default function Home() {
   }
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -882,7 +909,7 @@ export default function Home() {
     const date = new Date(timestamp)
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays === 0) {
       return formatTime(timestamp)
     } else if (diffDays === 1) {
@@ -896,23 +923,23 @@ export default function Home() {
 
   const shouldShowTimestamp = (messages: Message[], index: number): 'none' | 'inline' | 'header' => {
     if (index === 0) return 'header'
-    
+
     const currentMsg = messages[index]
     const prevMsg = messages[index - 1]
-    
+
     const currentTime = new Date(currentMsg.created_at).getTime()
     const prevTime = new Date(prevMsg.created_at).getTime()
     const diffMinutes = (currentTime - prevTime) / (1000 * 60)
-    
+
     // If more than 15 minutes, show a header timestamp (centered, like iMessage)
     if (diffMinutes > 15) return 'header'
-    
+
     // If sender changed, show inline timestamp on last message of previous group
     if (currentMsg.is_admin !== prevMsg.is_admin) return 'none'
-    
+
     // Same sender, within 5 minutes - no timestamp needed
     if (diffMinutes <= 5) return 'none'
-    
+
     // Same sender but 5-15 minutes gap - show inline
     return 'inline'
   }
@@ -920,20 +947,20 @@ export default function Home() {
   const shouldShowInlineTimestamp = (messages: Message[], index: number): boolean => {
     // Show inline timestamp on the LAST message of a group
     if (index === messages.length - 1) return true
-    
+
     const currentMsg = messages[index]
     const nextMsg = messages[index + 1]
-    
+
     const currentTime = new Date(currentMsg.created_at).getTime()
     const nextTime = new Date(nextMsg.created_at).getTime()
     const diffMinutes = (nextTime - currentTime) / (1000 * 60)
-    
+
     // Show timestamp if next message is from different sender
     if (currentMsg.is_admin !== nextMsg.is_admin) return true
-    
+
     // Show timestamp if there's a significant gap before next message
     if (diffMinutes > 5) return true
-    
+
     return false
   }
 
@@ -986,13 +1013,13 @@ export default function Home() {
             </div>
           </div>
           <span className="header-logo">rorchat<span className="dot">.</span></span>
-          
+
           <div className="header-actions">
             {currentUser && (
               <>
                 {/* Notification bell */}
                 {pushSupported && (
-                  <button 
+                  <button
                     className={`notification-btn ${pushState === 'subscribed' ? 'active' : ''}`}
                     onClick={() => pushState === 'subscribed' ? unsubscribePush() : subscribePush()}
                     title={pushState === 'subscribed' ? 'Notifications on' : 'Enable notifications'}
@@ -1000,11 +1027,11 @@ export default function Home() {
                   >
                     {pushState === 'subscribed' ? (
                       <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
                       </svg>
                     ) : (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
                       </svg>
                     )}
                   </button>
@@ -1016,20 +1043,20 @@ export default function Home() {
                   }}>
                     <span>{currentUser?.display_name || currentUser?.username || 'User'}</span>
                     <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6"/>
+                      <path d="M6 9l6 6 6-6" />
                     </svg>
                   </button>
                   <div className="user-dropdown">
                     <button onClick={(e) => { e.stopPropagation(); openSettings(); document.querySelector('.user-dropdown')?.classList.remove('show'); }}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                       </svg>
                       Settings
                     </button>
                     <button onClick={(e) => handleSignOut(e)}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
                       </svg>
                       Sign out
                     </button>
@@ -1040,8 +1067,8 @@ export default function Home() {
           </div>
         </header>
 
-        <div 
-          className="messages-container" 
+        <div
+          className="messages-container"
           ref={messagesContainerRef}
           onScroll={handleScroll}
         >
@@ -1067,7 +1094,7 @@ export default function Home() {
             displayMessages.map((msg, i) => {
               const timestampType = shouldShowTimestamp(displayMessages, i)
               const showInline = shouldShowInlineTimestamp(displayMessages, i)
-              
+
               return (
                 <div key={msg.id || i} className={`message-group ${msg.is_admin ? 'received' : 'sent'}`}>
                   {timestampType === 'header' && (
@@ -1075,7 +1102,7 @@ export default function Home() {
                       {formatDateHeader(msg.created_at)}
                     </div>
                   )}
-                  <div 
+                  <div
                     className={`message ${msg.is_admin ? 'received' : 'sent'} ${activeReactionPicker === msg.id ? 'picker-active' : ''}`}
                     onTouchStart={() => handleMessageTouchStart(msg.id)}
                     onTouchEnd={handleMessageTouchEnd}
@@ -1088,34 +1115,34 @@ export default function Home() {
                           {msg.reply_to.is_admin ? 'Rory' : 'You'}
                         </div>
                         <div className="reply-context-content">
-                          {msg.reply_to.content.length > 50 
-                            ? msg.reply_to.content.slice(0, 50) + '...' 
+                          {msg.reply_to.content.length > 50
+                            ? msg.reply_to.content.slice(0, 50) + '...'
                             : msg.reply_to.content}
                         </div>
                       </div>
                     )}
-                        {msg.image_url ? (
-                          <div className="message-image" onClick={() => setLightboxImage(msg.image_url!)}>
-                            <img 
-                              src={msg.image_url} 
-                              alt="Shared image"
-                            />
-                          </div>
-                        ) : (
-                          <div className="message-bubble">{msg.content}</div>
-                        )}
-                    
+                    {msg.image_url ? (
+                      <div className="message-image" onClick={() => setLightboxImage(msg.image_url!)}>
+                        <img
+                          src={msg.image_url}
+                          alt="Shared image"
+                        />
+                      </div>
+                    ) : (
+                      <div className="message-bubble">{msg.content}</div>
+                    )}
+
                     {/* Hover action buttons (desktop) */}
                     {currentUser && msg.id && (
                       <div className={`message-actions ${msg.is_admin ? 'left' : 'right'}`}>
-                        <button 
+                        <button
                           className="message-action-btn"
                           onClick={() => showReactionPicker(msg.id)}
                           title="React"
                         >
                           😊
                         </button>
-                        <button 
+                        <button
                           className="message-action-btn"
                           onClick={() => handleReply(msg)}
                           title="Reply"
@@ -1124,7 +1151,7 @@ export default function Home() {
                         </button>
                       </div>
                     )}
-                    
+
                     {/* Reactions */}
                     {msg.reactions && msg.reactions.length > 0 && (
                       <div className="message-reactions">
@@ -1140,7 +1167,7 @@ export default function Home() {
                         ))}
                       </div>
                     )}
-                    
+
                     {/* Reaction picker (shown on mobile long-press or desktop click) */}
                     {activeReactionPicker === msg.id && currentUser && (
                       <div className="reaction-picker-overlay" onClick={hideReactionPicker}>
@@ -1164,7 +1191,7 @@ export default function Home() {
                         </div>
                       </div>
                     )}
-                    
+
                     {showInline && (
                       <div className="message-time">{formatTime(msg.created_at)}</div>
                     )}
@@ -1187,7 +1214,7 @@ export default function Home() {
 
         {/* Not a <form>: avoids iOS Safari's Prev/Next/Done accessory bar */}
         <div className="input-area" role="form" aria-label="Message composer">
-          
+
           {/* Image preview */}
           {imagePreview && (
             <div className="image-preview">
@@ -1195,12 +1222,12 @@ export default function Home() {
               <div className="image-preview-actions">
                 <button type="button" className="image-preview-cancel" onClick={cancelImageUpload}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 6L6 18M6 6l12 12"/>
+                    <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
-                <button 
-                  type="button" 
-                  className="image-preview-send" 
+                <button
+                  type="button"
+                  className="image-preview-send"
                   onClick={sendImageMessage}
                   disabled={uploadingImage || rateLimitCountdown > 0}
                 >
@@ -1209,7 +1236,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          
+
           {/* Reply preview */}
           {replyingTo && !imagePreview && (
             <div className="reply-preview">
@@ -1218,14 +1245,14 @@ export default function Home() {
                   Replying to {replyingTo.is_admin ? 'Rory' : 'yourself'}
                 </span>
                 <span className="reply-preview-text">
-                  {replyingTo.content.length > 60 
-                    ? replyingTo.content.slice(0, 60) + '...' 
+                  {replyingTo.content.length > 60
+                    ? replyingTo.content.slice(0, 60) + '...'
                     : replyingTo.content}
                 </span>
               </div>
               <button type="button" className="reply-cancel" onClick={cancelReply}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12"/>
+                  <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
@@ -1242,22 +1269,23 @@ export default function Home() {
           )}
           <div className="input-wrapper">
             {!imagePreview && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="image-picker-btn"
                 onClick={pickChatImage}
                 disabled={!currentUser || rateLimitCountdown > 0}
                 title="Send image"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <path d="M21 15l-5-5L5 21"/>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
                 </svg>
               </button>
             )}
-            <textarea 
-              className="message-input" 
+            <textarea
+              ref={textareaRef}
+              className="message-input"
               aria-label="Message"
               placeholder={rateLimitCountdown > 0 ? `Wait ${rateLimitCountdown}s...` : "Message..."}
               rows={1}
@@ -1275,6 +1303,7 @@ export default function Home() {
                 if (rateLimitCountdown === 0) setMessageError('')
                 handleTyping()
               }}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -1289,7 +1318,7 @@ export default function Home() {
               disabled={!currentUser || !messageInput.trim() || rateLimitCountdown > 0 || !!imagePreview}
             >
               <svg viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
               </svg>
             </button>
           </div>
@@ -1308,7 +1337,7 @@ export default function Home() {
             <a href="/" className="logo">
               <span className="logo-text">rorchat<span className="dot">.</span></span>
             </a>
-            
+
             <div className="hero">
               <h1>Reach Rory, Today</h1>
               <p>The easiest way to reach Rory. Simple, fast.</p>
@@ -1317,41 +1346,41 @@ export default function Home() {
             <div className="auth-card">
               {error && <div className="auth-error show">{error}</div>}
 
-              <form 
-                className="auth-form" 
+              <form
+                className="auth-form"
                 onSubmit={handleAuth}
                 action="#"
                 method="POST"
               >
                 <div className="input-group">
                   <label htmlFor="auth-username">Username</label>
-                  <input 
+                  <input
                     id="auth-username"
-                    type="text" 
-                    name="username" 
-                    placeholder="Enter username" 
-                    required 
-                    autoComplete="username" 
-                    autoCapitalize="none" 
-                    minLength={2} 
-                    maxLength={16} 
+                    type="text"
+                    name="username"
+                    placeholder="Enter username"
+                    required
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    minLength={2}
+                    maxLength={16}
                   />
                 </div>
                 <div className="input-group">
                   <label htmlFor="auth-password">Password</label>
-                  <input 
+                  <input
                     id="auth-password"
-                    type="password" 
-                    name="password" 
-                    placeholder="Enter password" 
-                    minLength={6} 
-                    required 
-                    autoComplete="current-password" 
+                    type="password"
+                    name="password"
+                    placeholder="Enter password"
+                    minLength={6}
+                    required
+                    autoComplete="current-password"
                   />
                 </div>
-                <button 
-                  type="submit" 
-                  className="auth-btn" 
+                <button
+                  type="submit"
+                  className="auth-btn"
                   disabled={authLoading}
                 >
                   {authLoading ? 'Loading...' : 'Sign Up/In'}
@@ -1380,7 +1409,7 @@ export default function Home() {
         <div className="image-lightbox" onClick={() => setLightboxImage(null)}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
           <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()} />
@@ -1395,7 +1424,7 @@ export default function Home() {
               <h2>Settings</h2>
               <button className="settings-close" onClick={closeSettings}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12"/>
+                  <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
@@ -1415,16 +1444,16 @@ export default function Home() {
                     )}
                   </div>
                   <div className="profile-pic-actions">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="profile-pic-btn"
                       onClick={pickProfilePhoto}
                     >
                       Change Photo
                     </button>
                     {settingsProfilePic && (
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         className="profile-pic-btn remove"
                         onClick={() => setSettingsProfilePic(null)}
                       >
@@ -1459,8 +1488,8 @@ export default function Home() {
               <button className="settings-btn cancel" onClick={closeSettings}>
                 Cancel
               </button>
-              <button 
-                className="settings-btn save" 
+              <button
+                className="settings-btn save"
                 onClick={saveSettings}
                 disabled={settingsSaving}
               >

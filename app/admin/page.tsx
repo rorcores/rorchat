@@ -59,19 +59,20 @@ export default function Admin() {
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTriggeredRef = useRef<boolean>(false)
   const lastOptimisticUpdateRef = useRef<number>(0)
+  const replyInputRef = useRef<HTMLTextAreaElement>(null)
   const isInitialLoadRef = useRef<boolean>(true)
   const prevMessageCountRef = useRef<number>(0)
-  
+
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
-  
+
   // Image upload state
   const [imagePreview, setImagePreview] = useState<{ dataUrl: string; width: number; height: number } | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
-  
+
   // Handle mobile keyboard
   useKeyboardHeight()
-  
+
   // Push notifications for admin
   const { state: pushState, subscribe: subscribePush, unsubscribe: unsubscribePush, isSupported: pushSupported } = usePushNotifications({
     subscribeEndpoint: '/api/admin/push/subscribe'
@@ -79,7 +80,7 @@ export default function Admin() {
 
   useEffect(() => {
     checkAdminSession()
-    
+
     // Cleanup all timeouts on unmount
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -90,19 +91,19 @@ export default function Admin() {
 
   useEffect(() => {
     if (messages.length === 0) return
-    
+
     // On initial load or conversation switch, scroll instantly (no animation)
     // On new messages, scroll smoothly
     const isInitialOrSwitch = isInitialLoadRef.current || prevMessageCountRef.current === 0
     const hasNewMessages = messages.length > prevMessageCountRef.current
-    
+
     if (isInitialOrSwitch) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
       isInitialLoadRef.current = false
     } else if (hasNewMessages) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    
+
     prevMessageCountRef.current = messages.length
   }, [messages])
 
@@ -118,7 +119,7 @@ export default function Admin() {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    const heartbeat = () => fetch('/api/admin/me').catch(() => {})
+    const heartbeat = () => fetch('/api/admin/me').catch(() => { })
     heartbeat() // Initial ping
     const interval = setInterval(heartbeat, 10_000) // Every 10 seconds
     return () => clearInterval(interval)
@@ -130,18 +131,18 @@ export default function Admin() {
     // Clear messages immediately when switching conversations to prevent stale data
     setMessages([])
     setIsUserTyping(false)
-    
+
     // Track if this effect is still current (prevents stale responses from overwriting)
     let isCurrent = true
     const convId = selectedConv.id
-    
+
     const loadMessagesForConv = async (force = false) => {
       if (!isCurrent) return
       // Skip refresh if an optimistic update happened in the last 3 seconds
       if (!force && Date.now() - lastOptimisticUpdateRef.current < 3000) {
         return
       }
-      
+
       const res = await fetch(`/api/admin/messages?conversationId=${encodeURIComponent(convId)}`)
       if (!res.ok || !isCurrent) return
       const data = await res.json()
@@ -149,10 +150,10 @@ export default function Admin() {
       setMessages(data.messages || [])
       setIsUserTyping(data.userTyping || false)
     }
-    
+
     loadMessagesForConv(true) // Force initial load
     const interval = setInterval(() => loadMessagesForConv(), 2000)
-    
+
     return () => {
       isCurrent = false
       clearInterval(interval)
@@ -194,7 +195,7 @@ export default function Admin() {
   // Send typing status to server
   const sendTypingStatus = async (isTyping: boolean) => {
     if (!selectedConv) return
-    
+
     // Debounce: don't send more than once per second
     const now = Date.now()
     if (isTyping && now - lastTypingSentRef.current < 1000) return
@@ -204,17 +205,17 @@ export default function Admin() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationId: selectedConv.id, isTyping })
-    }).catch(() => {})
+    }).catch(() => { })
   }
 
   const handleTyping = () => {
     sendTypingStatus(true)
-    
+
     // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    
+
     // Set timeout to clear typing status after 2 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
       sendTypingStatus(false)
@@ -223,19 +224,19 @@ export default function Admin() {
 
   const handleReaction = async (messageId: string | undefined, emoji: string) => {
     if (!messageId) return
-    
+
     setActiveReactionPicker(null)
-    
+
     // Mark that an optimistic update is happening
     lastOptimisticUpdateRef.current = Date.now()
-    
+
     // Optimistic update
     setMessages(prev => prev.map(msg => {
       if (msg.id !== messageId) return msg
-      
+
       const reactions = [...(msg.reactions || [])]
       const existingIdx = reactions.findIndex(r => r.emoji === emoji)
-      
+
       if (existingIdx >= 0) {
         const existing = reactions[existingIdx]
         if (existing.hasAdmin) {
@@ -253,17 +254,17 @@ export default function Admin() {
         }
       } else {
         // Remove admin's other reactions first
-        const cleanedReactions = reactions.map(r => 
+        const cleanedReactions = reactions.map(r =>
           r.hasAdmin ? { ...r, count: r.count - 1, hasAdmin: false } : r
         ).filter(r => r.count > 0)
         cleanedReactions.push({ emoji, count: 1, hasAdmin: true, hasUser: false })
         reactions.length = 0
         reactions.push(...cleanedReactions)
       }
-      
+
       return { ...msg, reactions }
     }))
-    
+
     // Send to server
     await fetch('/api/admin/reactions', {
       method: 'POST',
@@ -283,13 +284,13 @@ export default function Admin() {
 
   const showReactionPicker = (messageId: string | undefined) => {
     if (!messageId) return
-    
+
     if (reactionPickerTimeoutRef.current) {
       clearTimeout(reactionPickerTimeoutRef.current)
     }
-    
+
     setActiveReactionPicker(messageId)
-    
+
     reactionPickerTimeoutRef.current = setTimeout(() => {
       setActiveReactionPicker(null)
     }, 5000)
@@ -305,7 +306,7 @@ export default function Admin() {
   // Long press handlers for mobile
   const handleMessageTouchStart = (messageId: string | undefined) => {
     if (!messageId) return
-    
+
     longPressTriggeredRef.current = false
     longPressTimeoutRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true
@@ -338,7 +339,7 @@ export default function Admin() {
       clearTimeout(reactionPickerTimeoutRef.current)
       reactionPickerTimeoutRef.current = null
     }
-    
+
     setSelectedConv(conv)
     setMobileView('chat')
     setReplyingTo(null)
@@ -364,7 +365,7 @@ export default function Admin() {
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = null
     }
-    
+
     setMobileView('list')
     setSelectedConv(null) // Clear selected conversation to stop message polling
     setMessages([]) // Clear messages to prevent stale data
@@ -387,6 +388,10 @@ export default function Admin() {
     const replyToId = replyingTo?.id
 
     input.value = ''
+    if (input) {
+      input.style.height = 'auto'
+      input.style.height = '48px' // Reset to default min-height
+    }
     setReplyingTo(null)
 
     // Clear typing status
@@ -397,6 +402,7 @@ export default function Admin() {
 
     // Mark that an optimistic update is happening
     lastOptimisticUpdateRef.current = Date.now()
+
 
     // Optimistic update
     setMessages(prev => [...prev, {
@@ -470,11 +476,7 @@ export default function Admin() {
     })
   }
 
-  const pickChatImage = async () => {
-    if (!selectedConv || imagePreview) return
-    const file = await pickFile('image/jpeg,image/png,image/gif,image/webp')
-    if (!file) return
-    
+  const handleChatImageFile = async (file: File) => {
     try {
       const { processImage, validateImageFile } = await import('@/lib/imageUtils')
       const validation = validateImageFile(file)
@@ -490,6 +492,28 @@ export default function Admin() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process image')
+    }
+  }
+
+  const pickChatImage = async () => {
+    if (!selectedConv || imagePreview) return
+    const file = await pickFile('image/jpeg,image/png,image/gif,image/webp')
+    if (!file) return
+    await handleChatImageFile(file)
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile()
+        if (file) {
+          e.preventDefault()
+          if (!selectedConv || imagePreview) return
+          await handleChatImageFile(file)
+          break
+        }
+      }
     }
   }
 
@@ -519,7 +543,7 @@ export default function Admin() {
         is_admin: replyingTo.is_admin
       } : null
     }
-    
+
     // Optimistic update
     setMessages(prev => [...prev, tempMessage])
 
@@ -547,28 +571,28 @@ export default function Admin() {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
-    
+
     // Check if it's today by comparing dates (not just time diff)
     const isToday = date.toDateString() === now.toDateString()
-    
+
     if (isToday) {
       const diff = now.getTime() - date.getTime()
       if (diff < 60000) return 'Just now'
       if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
-    
+
     // Not today - show relative days/weeks
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays < 7) return `${diffDays}d`
-    
+
     const diffWeeks = Math.floor(diffDays / 7)
     if (diffWeeks < 4) return `${diffWeeks}w`
-    
+
     const diffMonths = Math.floor(diffDays / 30)
     if (diffMonths < 12) return `${diffMonths}mo`
-    
+
     const diffYears = Math.floor(diffDays / 365)
     return `${diffYears}y`
   }
@@ -585,23 +609,23 @@ export default function Admin() {
 
   const shouldShowTimestamp = (messages: Message[], index: number): 'none' | 'inline' | 'header' => {
     if (index === 0) return 'header'
-    
+
     const currentMsg = messages[index]
     const prevMsg = messages[index - 1]
-    
+
     const currentTime = new Date(currentMsg.created_at).getTime()
     const prevTime = new Date(prevMsg.created_at).getTime()
     const diffMinutes = (currentTime - prevTime) / (1000 * 60)
-    
+
     // If more than 15 minutes, show a header timestamp (centered, like iMessage)
     if (diffMinutes > 15) return 'header'
-    
+
     // If sender changed, show inline timestamp on last message of previous group
     if (currentMsg.is_admin !== prevMsg.is_admin) return 'none'
-    
+
     // Same sender, within 5 minutes - no timestamp needed
     if (diffMinutes <= 5) return 'none'
-    
+
     // Same sender but 5-15 minutes gap - show inline
     return 'inline'
   }
@@ -609,20 +633,20 @@ export default function Admin() {
   const shouldShowInlineTimestamp = (messages: Message[], index: number): boolean => {
     // Show inline timestamp on the LAST message of a group
     if (index === messages.length - 1) return true
-    
+
     const currentMsg = messages[index]
     const nextMsg = messages[index + 1]
-    
+
     const currentTime = new Date(currentMsg.created_at).getTime()
     const nextTime = new Date(nextMsg.created_at).getTime()
     const diffMinutes = (nextTime - currentTime) / (1000 * 60)
-    
+
     // Show timestamp if next message is from different sender
     if (currentMsg.is_admin !== nextMsg.is_admin) return true
-    
+
     // Show timestamp if there's a significant gap before next message
     if (diffMinutes > 5) return true
-    
+
     return false
   }
 
@@ -630,7 +654,7 @@ export default function Admin() {
     const date = new Date(timestamp)
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays === 0) {
       return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     } else if (diffDays === 1) {
@@ -646,7 +670,7 @@ export default function Admin() {
     <>
       <div className="bg-decoration">
         <svg className="wave-top" viewBox="0 0 1440 120" fill="none" preserveAspectRatio="none">
-          <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,30 1440,60 L1440,0 L0,0 Z" fill="var(--primary)" opacity="0.03"/>
+          <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,30 1440,60 L1440,0 L0,0 Z" fill="var(--primary)" opacity="0.03" />
         </svg>
         <div className="gradient-orb orb-1"></div>
       </div>
@@ -682,7 +706,7 @@ export default function Admin() {
             <div className="sidebar-header-actions">
               {/* Notification bell for admin */}
               {pushSupported && isAuthenticated && (
-                <button 
+                <button
                   className={`notification-btn ${pushState === 'subscribed' ? 'active' : ''}`}
                   onClick={() => pushState === 'subscribed' ? unsubscribePush() : subscribePush()}
                   title={pushState === 'subscribed' ? 'Notifications on' : 'Enable notifications'}
@@ -690,11 +714,11 @@ export default function Admin() {
                 >
                   {pushState === 'subscribed' ? (
                     <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
                     </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
                   )}
                 </button>
@@ -764,7 +788,7 @@ export default function Admin() {
                 <div className="chat-header-left">
                   <button className="back-btn" onClick={goBackToList} aria-label="Back to conversations">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 12H5M12 19l-7-7 7-7"/>
+                      <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                   </button>
                   {selectedConv.profile_picture_url ? (
@@ -785,7 +809,7 @@ export default function Admin() {
                 {messages.map((msg, i) => {
                   const timestampType = shouldShowTimestamp(messages, i)
                   const showInline = shouldShowInlineTimestamp(messages, i)
-                  
+
                   return (
                     <div key={msg.id || i} className={`message-group ${msg.is_admin ? 'sent' : 'received'}`}>
                       {timestampType === 'header' && (
@@ -793,7 +817,7 @@ export default function Admin() {
                           {formatDateHeader(msg.created_at)}
                         </div>
                       )}
-                      <div 
+                      <div
                         className={`message ${msg.is_admin ? 'sent' : 'received'} ${activeReactionPicker === msg.id ? 'picker-active' : ''}`}
                         onTouchStart={() => handleMessageTouchStart(msg.id)}
                         onTouchEnd={handleMessageTouchEnd}
@@ -806,34 +830,34 @@ export default function Admin() {
                               {msg.reply_to.is_admin ? 'You' : getDisplayName(selectedConv)}
                             </div>
                             <div className="reply-context-content">
-                              {msg.reply_to.content.length > 50 
-                                ? msg.reply_to.content.slice(0, 50) + '...' 
+                              {msg.reply_to.content.length > 50
+                                ? msg.reply_to.content.slice(0, 50) + '...'
                                 : msg.reply_to.content}
                             </div>
                           </div>
                         )}
                         {msg.image_url ? (
                           <div className="message-image" onClick={() => setLightboxImage(msg.image_url!)}>
-                            <img 
-                              src={msg.image_url} 
+                            <img
+                              src={msg.image_url}
                               alt="Shared image"
                             />
                           </div>
                         ) : (
                           <div className="message-bubble">{msg.content}</div>
                         )}
-                        
+
                         {/* Hover action buttons (desktop) */}
                         {msg.id && (
                           <div className={`message-actions ${msg.is_admin ? 'right' : 'left'}`}>
-                            <button 
+                            <button
                               className="message-action-btn"
                               onClick={() => showReactionPicker(msg.id)}
                               title="React"
                             >
                               😊
                             </button>
-                            <button 
+                            <button
                               className="message-action-btn"
                               onClick={() => handleReply(msg)}
                               title="Reply"
@@ -842,7 +866,7 @@ export default function Admin() {
                             </button>
                           </div>
                         )}
-                        
+
                         {/* Reactions */}
                         {msg.reactions && msg.reactions.length > 0 && (
                           <div className="message-reactions">
@@ -858,7 +882,7 @@ export default function Admin() {
                             ))}
                           </div>
                         )}
-                        
+
                         {/* Reaction picker (shown on mobile long-press or desktop click) */}
                         {activeReactionPicker === msg.id && (
                           <div className="reaction-picker-overlay" onClick={hideReactionPicker}>
@@ -882,7 +906,7 @@ export default function Admin() {
                             </div>
                           </div>
                         )}
-                        
+
                         {showInline && (
                           <div className="message-time">
                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -912,12 +936,12 @@ export default function Admin() {
                     <div className="image-preview-actions">
                       <button type="button" className="image-preview-cancel" onClick={cancelImageUpload}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 6L6 18M6 6l12 12"/>
+                          <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                       </button>
-                      <button 
-                        type="button" 
-                        className="image-preview-send" 
+                      <button
+                        type="button"
+                        className="image-preview-send"
                         onClick={sendImageMessage}
                         disabled={uploadingImage}
                       >
@@ -926,7 +950,7 @@ export default function Admin() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Reply preview */}
                 {replyingTo && !imagePreview && (
                   <div className="reply-preview">
@@ -935,34 +959,35 @@ export default function Admin() {
                         Replying to {replyingTo.is_admin ? 'yourself' : getDisplayName(selectedConv)}
                       </span>
                       <span className="reply-preview-text">
-                        {replyingTo.content.length > 60 
-                          ? replyingTo.content.slice(0, 60) + '...' 
+                        {replyingTo.content.length > 60
+                          ? replyingTo.content.slice(0, 60) + '...'
                           : replyingTo.content}
                       </span>
                     </div>
                     <button type="button" className="reply-cancel" onClick={cancelReply}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6L6 18M6 6l12 12"/>
+                        <path d="M18 6L6 18M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
                 )}
                 <div className="reply-input-wrapper">
                   {!imagePreview && (
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="image-picker-btn"
                       onClick={pickChatImage}
                       title="Send image"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <path d="M21 15l-5-5L5 21"/>
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M21 15l-5-5L5 21" />
                       </svg>
                     </button>
                   )}
                   <textarea
+                    ref={replyInputRef}
                     className="reply-input"
                     name="reply"
                     placeholder="Type a reply..."
@@ -974,7 +999,13 @@ export default function Admin() {
                     spellCheck="false"
                     inputMode="text"
                     disabled={!!imagePreview}
-                    onInput={handleTyping}
+                    onInput={(e) => {
+                      handleTyping()
+                      const target = e.target as HTMLTextAreaElement
+                      target.style.height = 'auto'
+                      target.style.height = `${target.scrollHeight + 4}px`
+                    }}
+                    onPaste={handlePaste}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
@@ -984,7 +1015,7 @@ export default function Admin() {
                   />
                   <button type="submit" className="send-btn" disabled={!!imagePreview}>
                     <svg viewBox="0 0 24 24">
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                     </svg>
                   </button>
                 </div>
@@ -999,7 +1030,7 @@ export default function Admin() {
         <div className="image-lightbox" onClick={() => setLightboxImage(null)}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
           <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()} />
